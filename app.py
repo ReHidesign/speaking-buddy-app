@@ -1,53 +1,50 @@
 import streamlit as st
 import google.generativeai as genai
-import time
 
-st.set_page_config(page_title="Speaking Buddy AI", page_icon="🇬🇧")
+st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
+# API Kulcs
 api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 
 if api_key:
-    try:
-        genai.configure(api_key=api_key)
-        # Próbáljuk a leguniverzálisabb nevet
-        model = genai.GenerativeModel('gemini-pro')
+    genai.configure(api_key=api_key)
+    # A legeslegbiztosabb modellnév
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-        st.subheader("Choose a mode:")
-        cols = st.columns(4)
-        
-        # Ez a kis trükk segít elkerülni a hibát a gomboknál
-        def safe_generate(p):
+    st.subheader("Choose a mode:")
+    cols = st.columns(4)
+    
+    # Gombok - most csak sima szöveget küldünk, hátha a bonyolultabb kérés zavarta meg
+    if cols[0].button("📈 Test"):
+        st.session_state.messages.append({"role": "user", "content": "Let's start an English test."})
+    if cols[1].button("🎮 Game"):
+        st.session_state.messages.append({"role": "user", "content": "Play a game with me: you are a tourist."})
+    if cols[2].button("🖼️ Picture"):
+        st.session_state.messages.append({"role": "user", "content": "Describe a picture for me."})
+    if cols[3].button("💬 Chat"):
+        st.session_state.messages.append({"role": "user", "content": "Hello Buddy!"})
+
+    # Chat megjelenítése
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    # Válaszadás - ez a rész volt az, ami az elején működött
+    if prompt := st.chat_input("Type here..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.write(prompt)
+
+        with st.chat_message("assistant"):
             try:
-                time.sleep(1)
-                return model.generate_content(p).text
-            except Exception as err:
-                return f"Wait a moment and try again! (Error: {err})"
-
-        if cols[0].button("📈 Test"):
-            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Start an English level test!")}]
-        if cols[1].button("🎮 Game"):
-            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Roleplay: You are a lost tourist in London. Ask me for help!")}]
-        if cols[2].button("🖼️ Picture"):
-            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Describe a picture for me to talk about!")}]
-        if cols[3].button("💬 Chat"):
-            st.session_state.messages = [{"role": "assistant", "content": "Hi! How can I help you today?"}]
-
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-        if prompt := st.chat_input("Write here..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.write(prompt)
-            with st.chat_message("assistant"):
-                res = safe_generate(prompt)
-                st.write(res)
-                st.session_state.messages.append({"role": "assistant", "content": res})
-
-    except Exception as e:
-        st.error(f"Kapcsolódási hiba. Próbáld meg frissíteni az oldalt! ({e})")
+                # Minimális instrukció, hogy ne zavarjuk össze a rendszert
+                response = model.generate_content("You are an English mentor. " + prompt)
+                st.write(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            except Exception as e:
+                st.error(f"Hiba történt: {e}")
 else:
-    st.info("Kérlek, add meg az API kulcsot!")
+    st.info("Please enter your API key on the left.")

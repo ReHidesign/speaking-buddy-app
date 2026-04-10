@@ -1,47 +1,55 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
+import json
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
 api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 
 if api_key:
-    try:
-        # Itt kényszerítjük a stabil verziót
-        genai.configure(api_key=api_key, transport='rest') 
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    st.subheader("Choose a mode:")
+    cols = st.columns(4)
+    
+    # Közvetlen API hívás függvény - ez nem tud "elromlani" a verziók miatt
+    def call_gemini_direct(prompt):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        headers = {'Content-Type': 'application/json'}
+        data = {"contents": [{"parts":[{"text": prompt}]}]}
         
-        if "messages" not in st.session_state:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Error: {response.status_code} - {response.text}"
+
+    # Gombok beállítása
+    modes = {"📈 Test": "Start an English test!", 
+             "🎮 Game": "You are a lost tourist. Ask me for help!", 
+             "🖼️ Picture": "Describe a picture for me!", 
+             "💬 Chat": "Hi!"}
+
+    for i, (label, text) in enumerate(modes.items()):
+        if cols[i].button(label):
             st.session_state.messages = []
+            answer = call_gemini_direct(text)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 
-        st.subheader("Choose a mode:")
+    # Chat megjelenítése
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    # Üzenetküldés
+    if prompt := st.chat_input("Speak to Buddy..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.write(prompt)
         
-        # Visszateszem az összes gombot
-        cols = st.columns(4)
-        
-        # Egyszerűsített hívás a legstabilabb névvel
-        if cols[1].button("🎮 Game"):
-            st.session_state.messages = []
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            res = model.generate_content("You are a lost tourist in London. Start the conversation briefly!")
-            st.session_state.messages.append({"role": "assistant", "content": res.text})
-
-        # Chat megjelenítése
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.write(msg["content"])
-
-        if prompt := st.chat_input("Say something..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.write(prompt)
-            
-            with st.chat_message("assistant"):
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                # Itt is a legegyszerűbb formát használjuk
-                response = model.generate_content("Lost tourist persona: " + prompt)
-                st.write(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-
-    except Exception as e:
-        st.error(f"Sajnos még mindig hiba van: {e}")
+        with st.chat_message("assistant"):
+            answer = call_gemini_direct("You are an English teacher. " + prompt)
+            st.write(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 else:
-    st.info("Please enter your API key!")
+    st.info("Kérlek, add meg az API kulcsot!")

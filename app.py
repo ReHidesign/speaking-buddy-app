@@ -1,63 +1,49 @@
 import streamlit as st
 import google.generativeai as genai
 
-# --- OLDAL BEÁLLÍTÁSAI ---
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
-# --- COPYRIGHT LÁBLÉC ---
-st.markdown("""
-    <style>
-    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: white; color: grey; text-align: center; padding: 10px; font-size: 12px; border-top: 1px solid #eee; }
-    </style>
-    <div class="footer"><p>© 2026 Speaking Buddy AI Mentor | All Rights Reserved</p></div>
-    """, unsafe_allow_html=True)
-
-# --- API BEÁLLÍTÁS ---
+# API Kulcs kezelése
 api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 
 if api_key:
     try:
         genai.configure(api_key=api_key)
-        # Próbáljuk a legbiztosabb modell nevet
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
-
-        system_instruction = "You are Speaking Buddy, a friendly English mentor. Correct errors briefly and always end with a question."
+        # Ez a legáltalánosabb hivatkozás
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # Módválasztó gombok
+        # Gombok
         st.subheader("Choose a mode:")
         cols = st.columns(4)
-        modes = {"📈 Test": "Start a Level Test", "🎮 Game": "Challenge Mode", "🖼️ Picture": "Picture Lab", "💬 Chat": "Casual conversation"}
-        
-        for i, (label, cmd) in enumerate(modes.items()):
-            if cols[i].button(label):
-                st.session_state.messages.append({"role": "user", "content": cmd})
+        if cols[0].button("📈 Test"): st.session_state.messages.append({"role": "user", "content": "Start Level Test"})
+        if cols[1].button("🎮 Game"): st.session_state.messages.append({"role": "user", "content": "Challenge Mode"})
+        if cols[2].button("🖼️ Picture"): st.session_state.messages.append({"role": "user", "content": "Picture Lab"})
+        if cols[3].button("💬 Chat"): st.session_state.messages.append({"role": "user", "content": "Casual Chat"})
 
-        # Chat előzmények
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.write(message["content"])
+        # Chat megjelenítés
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.write(msg["content"])
 
-        # Üzenetküldés
+        # Üzenetküldés - Frissített logika
         if prompt := st.chat_input("Write here..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.write(prompt)
 
             with st.chat_message("assistant"):
-                try:
-                    # Ez a formátum stabilabb a Streamlit felhőben
-                    chat = model.start_chat(history=[])
-                    full_prompt = f"{system_instruction}\n\nUser says: {prompt}"
-                    response = chat.send_message(full_prompt)
+                # Nagyon egyszerű hívás a teszteléshez
+                response = model.generate_content(f"System: You are an English teacher. Answer the user briefly. User: {prompt}")
+                if response:
                     st.write(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
-                except Exception as ai_err:
-                    st.error(f"AI Error: {ai_err}")
+                else:
+                    st.error("Üres válasz érkezett az AI-tól.")
                 
     except Exception as e:
-        st.error(f"Connection Error: {e}")
+        st.error(f"Error: {e}")
 else:
-    st.info("Kérlek, add meg az API kulcsot a bal oldalon!")
+    st.info("Please enter your API Key in the sidebar!")

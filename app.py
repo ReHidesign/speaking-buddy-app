@@ -2,100 +2,88 @@ import streamlit as st
 import requests
 import json
 
-# Oldal beállítása
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
-# Bal oldali sáv az API kulcsnak
-st.sidebar.title("Settings")
-api_key = st.sidebar.text_input("Enter Groq API Key (gsk_...):", type="password")
+# --- API KULCS KEZELÉSE ---
+# Először megnézzük, be van-e állítva a Streamlit Secrets-ben (éles üzem)
+if "GROQ_API_KEY" in st.secrets:
+    api_key = st.secrets["GROQ_API_KEY"]
+else:
+    # Ha nincs, akkor marad a manuális beírás a teszteléshez
+    api_key = st.sidebar.text_input("Enter Groq API Key (gsk_...):", type="password")
 
 if api_key:
-    # Üzenetek tárolása a munkamenetben
+    # --- MEMÓRIA (SESSION STATE) INICIALIZÁLÁSA ---
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
-    # Emlékeztető a "HELP" funkcióra
-    st.sidebar.info("💡 Tip: In 'Game' mode, write 'HELP' if you need corrections or advice!")
+    st.sidebar.title("Speaking Buddy")
+    st.sidebar.info("💡 Write 'HELP' if you need corrections!")
+    
+    # Törlés gomb, ha új játékot akarnál indítani
+    if st.sidebar.button("🗑️ Clear Conversation"):
+        st.session_state.messages = []
+        st.rerun()
 
     st.subheader("Choose a mode:")
     cols = st.columns(4)
     
-    # Központi függvény a Groq hívásához
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        
+        # Átadjuk a korábbi üzeneteket is, hogy a Buddy emlékezzen a kontextusra!
+        history = [{"role": "system", "content": system_instruction}]
+        for m in st.session_state.messages[-6:]: # Az utolsó 6 üzenetet mindig elküldjük
+            history.append({"role": m["role"], "content": m["content"]})
+        history.append({"role": "user", "content": prompt})
+
         data = {
             "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.7 # Egy kis kreativitást adunk neki
+            "messages": history,
+            "temperature": 0.7
         }
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
-            if response.status_code == 200:
-                return response.json()['choices'][0]['message']['content']
-            else:
-                return f"Error: {response.status_code}"
-        except Exception as e:
-            return f"Connection error: {e}"
+            return response.json()['choices'][0]['message']['content']
+        except:
+            return "My circuits are a bit tired. Can you repeat that?"
 
-    # --- ÜZEMMÓDOK ---
+    # Üzemmód gombok - csak akkor adnak üzenetet, ha még üres a chat
+    modes = {
+        "📈 Test": "You are a level assessor. Start a quick test!",
+        "🎮 Game": "You are a lost tourist in London. STAY IN CHARACTER. Start by asking for help!",
+        "🖼️ Picture": "Describe a mysterious room and ask me what I see.",
+        "💬 Chat": "Hi! You are my casual friend. Ask me about my day."
+    }
 
-    # 1. TEST MÓD
-    if cols[0].button("📈 Test"):
-        st.session_state.messages = []
-        instr = "You are an English level assessor. Ask 3 quick, varied questions to test the user's level. Be professional."
-        ans = call_groq("Start the test!", instr)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-
-    # 2. GAME MÓD (Itt módosítottuk az utasítást!)
-    if cols[1].button("🎮 Game"):
-        st.session_state.messages = []
-        # Szigorú utasítás: Maradjon szerepben, ne tanítson!
-        instr = "You are a lost tourist in London. STAY IN CHARACTER 100%. Do not give feedback, do not correct grammar, and do not act like a teacher. Just talk like a confused person. Only give help if the user explicitly writes 'HELP'."
-        ans = call_groq("Excuse me, I'm lost. Start the conversation!", instr)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-
-    # 3. PICTURE MÓD
-    if cols[2].button("🖼️ Picture"):
-        st.session_state.messages = []
-        instr = "Describe a famous scene or painting vividly and ask the user to guess what it is or describe their feelings about it."
-        ans = call_groq("Start the picture description!", instr)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
-
-    # 4. CHAT MÓD
-    if cols[3].button("💬 Chat"):
-        st.session_state.messages = []
-        instr = "You are a friendly, casual English-speaking friend. Introduce yourself and ask how the user's day is going."
-        ans = call_groq("Hi there!", instr)
-        st.session_state.messages.append({"role": "assistant", "content": ans})
+    for i, (label, instr) in enumerate(modes.items()):
+        if cols[i].button(label):
+            st.session_state.messages = []
+            ans = call_groq("Start!", instr)
+            st.session_state.messages.append({"role": "assistant", "content": ans})
+            st.rerun()
 
     # --- CHAT MEGJELENÍTÉSE ---
+    # Ez a rész felel azért, hogy frissítés után is ott legyenek a buborékok
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # --- FELHASZNÁLÓI BEVITEL ---
-    if prompt := st.chat_input("Write back to Buddy..."):
+    # --- BEVITEL ---
+    if prompt := st.chat_input("Continue the story..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.write(prompt)
         
         with st.chat_message("assistant"):
-            # Meghatározzuk az utasítást attól függően, hogy mi történik
             if "HELP" in prompt.upper():
-                instr = "The user asked for help. Briefly explain their mistakes and give a better way to say it, then return to your role."
+                s_instr = "Give a very brief grammar correction, then return to character."
             else:
-                instr = "You are in a conversation. If in a game, stay in character. Do not give unsolicited advice. Keep it natural."
+                s_instr = "Continue the conversation naturally. Stay in character if in a game."
             
-            answer = call_groq(prompt, instr)
+            answer = call_groq(prompt, s_instr)
             st.write(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
-
 else:
-    st.info("Please enter your Groq API Key in the sidebar to start!")
+    st.warning("Please provide an API Key to wake up your Buddy!")

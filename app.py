@@ -10,7 +10,7 @@ import hashlib
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧", layout="centered")
 
-# --- STÍLUS ÉS DESIGN ---
+# --- DESIGN ---
 st.markdown("""
     <style>
     .stApp { background-color: #fafafa; }
@@ -23,7 +23,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIGURÁCIÓ ---
+# --- KONFIG ---
 TOPICS = ["🌍 Environment", "🏙️ Lifestyle", "💼 Career", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Technology"]
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
@@ -33,7 +33,6 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    # Session inicializálás
     for key in ["messages", "current_mode", "user_level", "chat_topic", "last_image_url", "intro_done", "feedback_level", "last_audio_id"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
@@ -64,33 +63,33 @@ if api_key:
         feedback_instr = {
             "Relaxed": "Only correct mistakes if explicitly asked.",
             "Balanced": "Subtly correct major mistakes in your response.",
-            "Teacher Mode": "Act like a tutor. Correct grammar mistakes clearly before answering."
+            "Teacher Mode": "Correct grammar mistakes clearly before answering."
         }
         full_instr = (
             f"{system_instruction} Student level: {st.session_state.user_level}. "
             f"Feedback style: {feedback_instr[st.session_state.feedback_level]}. "
             "IF the student says 'HELP': Explain grammar errors. "
-            "IF the student says 'finished': Provide a Task Summary. "
-            "STRICT: Non-spoken actions in italics and brackets: *(Buddy smiles)*."
+            "IF the student says 'finished': Provide a Task Summary."
         )
         history = [{"role": "system", "content": full_instr}]
-        for m in st.session_state.messages[-10:]:
+        for m in st.session_state.messages[-8:]: # Kicsit rövidebb memória a stabilitásért
             history.append({"role": m["role"], "content": m["content"]})
         if prompt: history.append({"role": "user", "content": prompt})
+        
         data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.7}
         try:
-            r = requests.post(url, headers=headers, data=json.dumps(data))
+            r = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
             res = r.json()
             if 'choices' in res: return res['choices'][0]['message']['content']
-            return "*(Buddy looks puzzled)* Connection issue. Can you repeat?"
-        except: return "*(Buddy apologizes)* My brain stalled. Let's try again!"
+            return "*(Buddy apologizes)* I had a momentary lapse. Could you say that again?"
+        except: 
+            return "*(Buddy looks puzzled)* My connection timed out. Let's try one more time!"
 
-    # --- SIDEBAR (CONTROL PANEL ÚJRA A RÉGI) ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.session_state.feedback_level = st.select_slider("Buddy's Feedback Level:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
-        
         st.markdown("<div class='help-card'><b>🆘 Need Help?</b><br>Just say or type <b>'HELP'</b>!</div>", unsafe_allow_html=True)
         st.markdown("---")
 
@@ -98,7 +97,6 @@ if api_key:
             st.markdown("### 📍 Current Session:")
             if st.session_state.user_level: 
                 st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
-                # --- VISSZATÉVE: SZINTVÁLTÓ GOMB ---
                 if st.button("🔄 Change Level"):
                     st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
                     st.session_state.messages = []
@@ -116,7 +114,7 @@ if api_key:
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
-    # --- MAIN FLOW ---
+    # --- FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-container'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.write("### Welcome!")
@@ -136,7 +134,7 @@ if api_key:
         if st.button("🔍 Assess my level (Chat with Buddy)", use_container_width=True):
             st.session_state.user_level = "B1 (Intermediate)" 
             st.session_state.current_mode = "Assessment"
-            ans = call_groq("Hello! I'm not sure about my level. Can you chat with me to evaluate my speaking skills?", "Level Evaluator.")
+            ans = call_groq("Hello! Can you help me find out my English level through a short conversation?", "Level Evaluator.")
             st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
@@ -163,7 +161,6 @@ if api_key:
                     st.rerun()
 
     else:
-        # CHAT INTERFACE
         if st.session_state.current_mode == "Picture" and st.session_state.last_image_url:
             st.image(st.session_state.last_image_url)
 
@@ -184,8 +181,7 @@ if api_key:
             current_audio_id = hashlib.md5(audio_data['bytes']).hexdigest()
             if current_audio_id != st.session_state.last_audio_id:
                 st.session_state.last_audio_id = current_audio_id
-                with st.spinner('Listening...'):
-                    user_msg = transcribe_audio(audio_data['bytes'])
+                user_msg = transcribe_audio(audio_data['bytes'])
         elif text_input:
             user_msg = text_input
 

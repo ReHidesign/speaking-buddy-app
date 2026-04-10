@@ -10,7 +10,7 @@ import hashlib
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🤖", layout="centered")
 
-# --- DESIGN (v33-as alapok megtartva) ---
+# --- DESIGN (Maradt a bevált forma) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa; }
@@ -46,9 +46,9 @@ if api_key:
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
         data = {"model": "whisper-large-v3", "language": "en"}
         try:
-            r = requests.post(url, headers=headers, files=files, data=data, timeout=10)
+            r = requests.post(url, headers=headers, files=files, data=data, timeout=8)
             return r.json().get("text", "")
-        except: return ""
+        except: return None
 
     def speak_text(text):
         clean = re.sub(r'\(.*?\)', '', text).replace("*", "").strip()
@@ -61,79 +61,64 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
-        mode_instr = ""
-        if st.session_state.current_mode == "Situation":
-            mode_instr = "ROLEPLAY: Be a partner, act immediately in character."
-        elif st.session_state.current_mode == "Assessment":
-            mode_instr = "ASSESSMENT: Ask one question at a time to check user level."
-
-        full_sys = f"{system_instruction} {mode_instr} Level: {st.session_state.user_level}. Feedback: {st.session_state.feedback_level}."
+        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Feedback: {st.session_state.feedback_level}."
+        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         
-        # STABILITÁS: Csak az utolsó 4 üzenetet küldjük el, hogy ne legyen időtúllépés
-        hist = [{"role": "system", "content": full_sys}]
+        # RADIKÁLIS MEMÓRIA CSÖKKENTÉS: Csak az utolsó 2 váltás
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         
         try:
-            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=15)
-            res = r.json()
-            if 'choices' in res: return res['choices'][0]['message']['content']
-            return "*(Buddy smiles)* My ears failed me for a second. Can you say that again?"
+            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=10)
+            return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy nods)* I lost the connection for a moment. Please continue!"
+            return "*(Buddy is thinking hard)* I'm having trouble connecting. Could you please try your last sentence again?"
 
     # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
+        st.session_state.feedback_level = st.select_slider("Feedback:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
-        
-        if st.session_state.user_level or st.session_state.current_mode:
-            st.markdown("### 📍 Current Status:")
-            if st.session_state.user_level:
-                st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
-                if st.button("🔄 Change Level"):
-                    st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
-                    st.session_state.messages = []
-                    st.rerun()
-            if st.session_state.current_mode:
-                st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
-                if st.button("🏠 Change Mode/Topic"):
-                    st.session_state.current_mode = st.session_state.chat_topic = None
-                    st.session_state.messages = []
-                    st.rerun()
-
-        st.markdown("<div class='help-card'><b>🆘 Help:</b> Say <b>'HELP'</b> for grammar tips!</div>", unsafe_allow_html=True)
-        st.markdown("---")
+        if st.session_state.user_level:
+            st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
+            if st.button("🔄 Change Level"):
+                st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
+                st.session_state.messages = []
+                st.rerun()
+        if st.session_state.current_mode:
+            st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
+            if st.button("🏠 Change Mode/Topic"):
+                st.session_state.current_mode = st.session_state.chat_topic = None
+                st.session_state.messages = []
+                st.rerun()
+        st.markdown("<div class='help-card'><b>🆘 Help:</b> Type <b>'HELP'</b> if Buddy gets stuck!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
 
-    # --- FLOW ---
+    # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b> and focus on <b>real-life communication</b>.<br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b>.<br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, or just have a <b>chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         if st.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
 
     elif not st.session_state.user_level:
-        st.subheader("Please set your English level:")
+        st.subheader("Set your level:")
         cols = st.columns(2)
         for i, l in enumerate(LEVELS.keys()):
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
-        st.markdown("---")
-        if st.button("🔍 Assess my level (Chat with Buddy)", use_container_width=True):
+        if st.button("🔍 Assess my level", use_container_width=True):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            ans = call_groq("Hello! Let's talk to find my level.", "Level Evaluator.")
-            st.session_state.messages.append({"role": "assistant", "content": ans})
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Start assessment.", "Level Evaluator")})
             st.rerun()
 
     elif not st.session_state.current_mode:
-        st.subheader("Choose your practice mode:")
+        st.subheader("Choose mode:")
         m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat", "🗣️ Slang & Idioms"]
         cols = st.columns(2)
         for i, m in enumerate(m_list):
@@ -142,15 +127,14 @@ if api_key:
                 st.rerun()
 
     elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
-        st.subheader(f"Select a topic for {st.session_state.current_mode}:")
+        st.subheader("Select topic:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%3].button(topic, use_container_width=True):
                 st.session_state.chat_topic = topic.split()[-1]
                 if st.session_state.current_mode == "Picture":
-                    st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/realistic_exam_photo_{st.session_state.chat_topic}?width=800&height=600&seed={random.randint(1,99)}"
-                ans = call_groq(f"Start a {st.session_state.current_mode} about {st.session_state.chat_topic}.", "Language Partner.")
-                st.session_state.messages.append({"role": "assistant", "content": ans})
+                    st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/realistic_exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}"
+                st.session_state.messages.append({"role": "assistant", "content": call_groq(f"Start {st.session_state.current_mode}.", "Partner")})
                 st.rerun()
 
     else:
@@ -176,9 +160,9 @@ if api_key:
 
         if user_msg:
             st.session_state.messages.append({"role": "user", "content": user_msg})
-            with st.spinner('Buddy is thinking...'):
-                answer = call_groq(user_msg, "Partner.")
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+            with st.spinner('Buddy is listening...'):
+                ans = call_groq(user_msg, "Partner")
+                st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 11px;'>© 2026 Speaking Buddy v34 | ReHi</p>", unsafe_allow_html=True)
+    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 10px;'>© 2026 Speaking Buddy v35 | ReHi</p>", unsafe_allow_html=True)

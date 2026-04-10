@@ -10,7 +10,7 @@ import hashlib
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🤖", layout="centered")
 
-# --- DESIGN (Maradt a kért forma) ---
+# --- DESIGN ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa; }
@@ -18,14 +18,14 @@ st.markdown("""
     .buddy-avatar { font-size: 100px; margin-bottom: 10px; }
     .main-title { color: #1e3a5a; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
     .sub-title { color: #666; font-style: italic; margin-top: 0px; margin-bottom: 30px; }
-    .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 20px; }
+    .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     .status-box { background-color: #ffffff; padding: 12px; border-radius: 12px; border-left: 5px solid #3498db; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); color: #2e4053; }
     .help-card { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px dashed #e67e22; color: #d35400; font-size: 13px; margin-top: 10px; }
     div.stButton > button { display: block; margin: 0 auto; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIG ---
+# --- CONFIG ---
 TOPICS = ["🌍 Environment", "🏙️ Lifestyle", "💼 Career", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Technology"]
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
@@ -46,7 +46,6 @@ if api_key:
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
         data = {"model": "whisper-large-v3", "language": "en"}
         try:
-            # Megemelt timeout a hosszabb beszédfolyamokhoz
             r = requests.post(url, headers=headers, files=files, data=data, timeout=20)
             return r.json().get("text", "")
         except: return "ERROR_AUDIO"
@@ -64,8 +63,6 @@ if api_key:
         
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Feedback: {st.session_state.feedback_level}."
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
-        
-        # Szigorú memória-kontroll a gyors válaszért
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         
@@ -73,12 +70,12 @@ if api_key:
             r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=15)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy looks attentive)* I'm ready to continue! Could you repeat that or try typing it?"
+            return "*(Buddy nods)* I'm ready to continue! Could you repeat that or try typing it?"
 
     # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.session_state.feedback_level = st.select_slider("Feedback:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
+        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
         if st.session_state.user_level:
             st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
@@ -92,7 +89,7 @@ if api_key:
                 st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' or check your internet connection!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for grammar tips or advice!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -100,26 +97,27 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b>.<br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, or just have a <b>chat</b>, I'm ready!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         if st.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
 
     elif not st.session_state.user_level:
-        st.subheader("Set your level:")
+        st.subheader("Please set your English level:")
         cols = st.columns(2)
         for i, l in enumerate(LEVELS.keys()):
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
-        if st.button("🔍 Assess my level", use_container_width=True):
+        st.markdown("---")
+        if st.button("🔍 Assess my level (Chat with Buddy)", use_container_width=True):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            st.session_state.messages.append({"role": "assistant", "content": call_groq("Start assessment.", "Level Evaluator")})
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Let's talk to find my level.", "Level Evaluator")})
             st.rerun()
 
     elif not st.session_state.current_mode:
-        st.subheader("Choose mode:")
+        st.subheader("Choose your practice mode:")
         m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat", "🗣️ Slang & Idioms"]
         cols = st.columns(2)
         for i, m in enumerate(m_list):
@@ -128,14 +126,14 @@ if api_key:
                 st.rerun()
 
     elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
-        st.subheader("Pick a topic:")
+        st.subheader(f"Select a topic for {st.session_state.current_mode}:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%3].button(topic, use_container_width=True):
                 st.session_state.chat_topic = topic.split()[-1]
                 if st.session_state.current_mode == "Picture":
                     st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/realistic_exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}"
-                st.session_state.messages.append({"role": "assistant", "content": call_groq(f"Start {st.session_state.current_mode}.", "Partner")})
+                st.session_state.messages.append({"role": "assistant", "content": call_groq(f"Start a {st.session_state.current_mode} about {st.session_state.chat_topic}.", "Language Partner")})
                 st.rerun()
 
     else:
@@ -158,7 +156,7 @@ if api_key:
                 st.session_state.last_audio_id = c_id
                 user_msg = transcribe_audio(audio_data['bytes'])
                 if user_msg == "ERROR_AUDIO":
-                    st.warning("⚠️ Buddy couldn't hear that clearly. Try speaking closer to the mic or typing!")
+                    st.warning("⚠️ Connection slow. Try speaking closer to the mic or typing!")
                     user_msg = None
         elif text_input: user_msg = text_input
 
@@ -169,4 +167,4 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 10px;'>© 2026 Speaking Buddy v36 | ReHi</p>", unsafe_allow_html=True)
+    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 10px;'>© 2026 Speaking Buddy v37 | ReHi</p>", unsafe_allow_html=True)

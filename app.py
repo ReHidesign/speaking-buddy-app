@@ -63,7 +63,7 @@ if api_key:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         feedback_instr = {
             "Relaxed": "Only correct mistakes if explicitly asked.",
-            "Balanced": "Subtly correct major mistakes in your response. Be encouraging.",
+            "Balanced": "Subtly correct major mistakes in your response.",
             "Teacher Mode": "Act like a tutor. Correct grammar mistakes clearly before answering."
         }
         full_instr = (
@@ -82,31 +82,34 @@ if api_key:
             r = requests.post(url, headers=headers, data=json.dumps(data))
             res = r.json()
             if 'choices' in res: return res['choices'][0]['message']['content']
-            return "*(Buddy looks puzzled)* I had a connection glitch. Can you say that again?"
+            return "*(Buddy looks puzzled)* Connection issue. Can you repeat?"
         except: return "*(Buddy apologizes)* My brain stalled. Let's try again!"
 
-    # --- SIDEBAR (VISSZAÁLLÍTOTT CONTROL PANEL) ---
+    # --- SIDEBAR (CONTROL PANEL ÚJRA A RÉGI) ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.session_state.feedback_level = st.select_slider("Buddy's Feedback Level:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
         
-        # HELP CARD
-        st.markdown("<div class='help-card'><b>🆘 Need Help?</b><br>Just say or type <b>'HELP'</b> for advice!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Need Help?</b><br>Just say or type <b>'HELP'</b>!</div>", unsafe_allow_html=True)
         st.markdown("---")
 
-        # NAVIGÁCIÓS INFÓ (Hogy látszódjon, merre vagyunk)
         if st.session_state.user_level or st.session_state.current_mode:
             st.markdown("### 📍 Current Session:")
             if st.session_state.user_level: 
                 st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
+                # --- VISSZATÉVE: SZINTVÁLTÓ GOMB ---
+                if st.button("🔄 Change Level"):
+                    st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
+                    st.session_state.messages = []
+                    st.rerun()
+
             if st.session_state.current_mode: 
                 st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
-            
-            if st.button("🏠 Change Mode/Topic"):
-                st.session_state.current_mode = st.session_state.chat_topic = None
-                st.session_state.messages = []
-                st.rerun()
+                if st.button("🏠 Change Mode/Topic"):
+                    st.session_state.current_mode = st.session_state.chat_topic = None
+                    st.session_state.messages = []
+                    st.rerun()
         
         st.markdown("---")
         if st.button("🗑️ Full Reset"):
@@ -129,7 +132,6 @@ if api_key:
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
-        # VISSZATÉVE: SZINTFELMÉRŐ GOMB
         st.markdown("---")
         if st.button("🔍 Assess my level (Chat with Buddy)", use_container_width=True):
             st.session_state.user_level = "B1 (Intermediate)" 

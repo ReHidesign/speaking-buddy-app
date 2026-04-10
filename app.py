@@ -32,6 +32,7 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
+    # Session állapota
     for key in ["messages", "current_mode", "user_level", "chat_topic", "last_image_url", "intro_done", "feedback_level"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
@@ -48,6 +49,7 @@ if api_key:
         except: return ""
 
     def speak_text(text):
+        # Kiszűrjük a zárójeles instrukciókat a felolvasásból
         speech_only = re.sub(r'\(.*?\)', '', text)
         speech_only = speech_only.replace("*", "").replace("?", ".").replace("!", ".").strip()
         tts = gTTS(text=speech_only if speech_only else "I'm listening", lang='en', tld='co.uk')
@@ -60,26 +62,38 @@ if api_key:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
         feedback_instr = {
-            "Relaxed": "Only correct mistakes if explicitly asked. Focus on flow.",
+            "Relaxed": "Only correct mistakes if explicitly asked. Focus on natural flow.",
             "Balanced": "Subtly correct major mistakes in your response. Be encouraging.",
-            "Teacher Mode": "Correct every grammar mistake clearly before answering."
+            "Teacher Mode": "Act like a strict but kind tutor. Correct grammar mistakes clearly."
         }
         
         full_instr = (
             f"{system_instruction} Student level: {st.session_state.user_level}. "
             f"Feedback style: {feedback_instr[st.session_state.feedback_level]}. "
-            "IF the student says 'HELP': Explain the grammar error in their last sentence clearly. "
-            "IF the student says 'finished' or 'done': Provide a 'Task Summary' feedback. "
-            "STRICT: Put all non-spoken actions in brackets and italics: *(Buddy nods)*. "
+            "IF the student says 'HELP': Provide a short, clear grammar explanation about their last input. "
+            "IF the student says 'finished' or 'done': Give a structured 'Task Summary' at the end. "
+            "CONFIRMATION: You HAVE a voice (audio). If the student hears you, acknowledge it. "
+            "STRICT: Put all non-spoken actions in brackets and italics: *(Buddy smiles)*. "
         )
+        
         history = [{"role": "system", "content": full_instr}]
         for m in st.session_state.messages[-10:]:
             history.append({"role": m["role"], "content": m["content"]})
         if prompt: history.append({"role": "user", "content": prompt})
+        
         data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.7}
-        return requests.post(url, headers=headers, data=json.dumps(data)).json()['choices'][0]['message']['content']
+        
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data))
+            result = response.json()
+            if 'choices' in result:
+                return result['choices'][0]['message']['content']
+            else:
+                return "*(Buddy looks puzzled)* I'm sorry, I had a brief connection issue. Could you repeat that?"
+        except:
+            return "*(Buddy apologizes)* I encountered a small technical glitch. Let's try again!"
 
-    # --- SIDEBAR (Az állandó HELP szekcióval) ---
+    # --- SIDEBAR NAVIGÁCIÓ ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         
@@ -90,15 +104,12 @@ if api_key:
         )
         
         st.markdown("---")
-        
-        # Állandó HELP kártya
         st.markdown("""
             <div class='help-card'>
                 <b>🆘 Need Help?</b><br>
-                Just say or type <b>'HELP'</b> if you are stuck or want to check your grammar!
+                Type or say <b>'HELP'</b> anytime for grammar advice or translations!
             </div>
             """, unsafe_allow_html=True)
-        
         st.markdown("---")
         
         if st.session_state.user_level or st.session_state.current_mode:
@@ -122,12 +133,12 @@ if api_key:
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
-    # --- FLOW LOGIKA ---
+    # --- UI FLOW ---
     if not st.session_state.intro_done:
-        st.markdown("<div class='buddy-container'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language speaking partner</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='buddy-container'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.write("### Welcome!")
-        st.write("I am here to help you practice **English speaking** and focus on **real-life communication**, so you can use the language confidently (and pass your exams).")
-        if st.button("Let's start! 🚀"):
+        st.write("I'm here to practice speaking with you. Choose your level and a topic to begin!")
+        if st.button("Let's go! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
 
@@ -153,7 +164,7 @@ if api_key:
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%3].button(topic, use_container_width=True):
-                with st.spinner('Buddy is preparing...'):
+                with st.spinner('Buddy is preparing the session...'):
                     clean_t = topic.split()[-1]
                     st.session_state.chat_topic = clean_t
                     if st.session_state.current_mode == "Picture":
@@ -163,7 +174,7 @@ if api_key:
                     st.rerun()
 
     else:
-        # CHAT
+        # CHAT INTERFACE
         if st.session_state.current_mode == "Picture" and st.session_state.last_image_url:
             st.image(st.session_state.last_image_url)
 
@@ -173,7 +184,7 @@ if api_key:
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-        input_col, mic_col = st.columns([0.8, 0.2])
+        input_col, mic_col = st.columns([0.85, 0.15])
         with mic_col:
             audio_data = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="mic_recorder")
         with input_col:
@@ -181,7 +192,7 @@ if api_key:
 
         user_msg = None
         if audio_data:
-            with st.spinner('Listening...'):
+            with st.spinner('Buddy is listening...'):
                 user_msg = transcribe_audio(audio_data['bytes'])
         elif text_input:
             user_msg = text_input
@@ -191,6 +202,7 @@ if api_key:
             with st.spinner('Buddy is thinking...'):
                 answer = call_groq(user_msg, f"Mode: {st.session_state.current_mode}.")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+            # AZONNALI RERUN: Megelőzi a hanghurok kialakulását azáltal, hogy törli a mic_recorder puffert
             st.rerun()
 
     st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 11px;'>© 2026 Speaking Buddy by ReHi</p>", unsafe_allow_html=True)

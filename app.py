@@ -10,7 +10,7 @@ import hashlib
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🤖", layout="centered")
 
-# --- DESIGN (Maradt a bevált forma) ---
+# --- DESIGN (Maradt a kért forma) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f8f9fa; }
@@ -46,9 +46,10 @@ if api_key:
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
         data = {"model": "whisper-large-v3", "language": "en"}
         try:
-            r = requests.post(url, headers=headers, files=files, data=data, timeout=8)
+            # Megemelt timeout a hosszabb beszédfolyamokhoz
+            r = requests.post(url, headers=headers, files=files, data=data, timeout=20)
             return r.json().get("text", "")
-        except: return None
+        except: return "ERROR_AUDIO"
 
     def speak_text(text):
         clean = re.sub(r'\(.*?\)', '', text).replace("*", "").strip()
@@ -64,15 +65,15 @@ if api_key:
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Feedback: {st.session_state.feedback_level}."
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         
-        # RADIKÁLIS MEMÓRIA CSÖKKENTÉS: Csak az utolsó 2 váltás
+        # Szigorú memória-kontroll a gyors válaszért
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         
         try:
-            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=10)
+            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=15)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy is thinking hard)* I'm having trouble connecting. Could you please try your last sentence again?"
+            return "*(Buddy looks attentive)* I'm ready to continue! Could you repeat that or try typing it?"
 
     # --- SIDEBAR ---
     with st.sidebar:
@@ -91,7 +92,7 @@ if api_key:
                 st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
-        st.markdown("<div class='help-card'><b>🆘 Help:</b> Type <b>'HELP'</b> if Buddy gets stuck!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' or check your internet connection!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -127,7 +128,7 @@ if api_key:
                 st.rerun()
 
     elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
-        st.subheader("Select topic:")
+        st.subheader("Pick a topic:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%3].button(topic, use_container_width=True):
@@ -156,13 +157,16 @@ if api_key:
             if c_id != st.session_state.last_audio_id:
                 st.session_state.last_audio_id = c_id
                 user_msg = transcribe_audio(audio_data['bytes'])
+                if user_msg == "ERROR_AUDIO":
+                    st.warning("⚠️ Buddy couldn't hear that clearly. Try speaking closer to the mic or typing!")
+                    user_msg = None
         elif text_input: user_msg = text_input
 
         if user_msg:
             st.session_state.messages.append({"role": "user", "content": user_msg})
-            with st.spinner('Buddy is listening...'):
+            with st.spinner('Thinking...'):
                 ans = call_groq(user_msg, "Partner")
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 10px;'>© 2026 Speaking Buddy v35 | ReHi</p>", unsafe_allow_html=True)
+    st.markdown("<br><hr><p style='text-align: center; color: grey; font-size: 10px;'>© 2026 Speaking Buddy v36 | ReHi</p>", unsafe_allow_html=True)

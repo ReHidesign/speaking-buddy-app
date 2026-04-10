@@ -1,5 +1,6 @@
-google-generativeai
 streamlit
 requests
 gTTS
 streamlit-mic-recorder
+google-generativeai
+pydub

@@ -9,64 +9,45 @@ api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 if api_key:
     try:
         genai.configure(api_key=api_key)
-        
-        # FIX MODELL (Nincs több keresgélés, ez a legstabilabb)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
-        system_instruction = """
-        Te egy Speaking Buddy nevű angol mentor vagy. 
-        SZABÁLY: Mindig javítsd ki a diák hibáit az üzeneted elején!
-        MÓDOK:
-        - Start Level Test: 5 kérdéses szintfelmérő.
-        - Challenge Mode: Te egy karakter vagy (pl. eltévedt turista).
-        - Picture Lab: Írj le egy képet.
-        """
+        # Próbáljuk a leguniverzálisabb nevet
+        model = genai.GenerativeModel('gemini-pro')
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # Gombok
         st.subheader("Choose a mode:")
         cols = st.columns(4)
         
-        # Funkció a válasz generáláshoz, hogy ne ismételjük a kódot
-        def get_ai_response(prompt_text):
+        # Ez a kis trükk segít elkerülni a hibát a gomboknál
+        def safe_generate(p):
             try:
-                time.sleep(1) # Biztonsági szünet a kvóta miatt
-                return model.generate_content(prompt_text).text
-            except Exception as e:
-                return f"Hiba a kapcsolódásnál: {e}"
+                time.sleep(1)
+                return model.generate_content(p).text
+            except Exception as err:
+                return f"Wait a moment and try again! (Error: {err})"
 
         if cols[0].button("📈 Test"):
-            st.session_state.messages = [{"role": "assistant", "content": get_ai_response(system_instruction + " Start a Level Test!")}]
+            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Start an English level test!")}]
         if cols[1].button("🎮 Game"):
-            st.session_state.messages = [{"role": "assistant", "content": get_ai_response(system_instruction + " Start a Roleplay: you are a lost tourist in London!")}]
+            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Roleplay: You are a lost tourist in London. Ask me for help!")}]
         if cols[2].button("🖼️ Picture"):
-            st.session_state.messages = [{"role": "assistant", "content": get_ai_response(system_instruction + " Describe a picture for me to explain!")}]
+            st.session_state.messages = [{"role": "assistant", "content": safe_generate("Describe a picture for me to talk about!")}]
         if cols[3].button("💬 Chat"):
-            st.session_state.messages = [{"role": "assistant", "content": "Hi! I'm your Speaking Buddy. How are you today?"}]
+            st.session_state.messages = [{"role": "assistant", "content": "Hi! How can I help you today?"}]
 
-        # Chat megjelenítése
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.write(msg["content"])
 
-        # Üzenetküldés
         if prompt := st.chat_input("Write here..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.write(prompt)
-
+            with st.chat_message("user"): st.write(prompt)
             with st.chat_message("assistant"):
-                context = system_instruction + "\n"
-                for m in st.session_state.messages[-5:]:
-                    context += f"{m['role']}: {m['content']}\n"
-                
-                response_text = get_ai_response(context)
-                st.write(response_text)
-                st.session_state.messages.append({"role": "assistant", "content": response_text})
+                res = safe_generate(prompt)
+                st.write(res)
+                st.session_state.messages.append({"role": "assistant", "content": res})
 
     except Exception as e:
-        st.error(f"Valami nem stimmel: {e}")
+        st.error(f"Kapcsolódási hiba. Próbáld meg frissíteni az oldalt! ({e})")
 else:
-    st.info("Kérlek, add meg az API kulcsot a bal oldalon!")
+    st.info("Kérlek, add meg az API kulcsot!")

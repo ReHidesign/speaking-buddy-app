@@ -5,18 +5,11 @@ from gtts import gTTS
 import io
 from streamlit_mic_recorder import mic_recorder
 import re
+import random
 
-st.set_page_config(page_title="Speaking Buddy v13", page_icon="🇬🇧", layout="wide")
+st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
-# --- CUSTOM CSS A SZÍNEKHEZ ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #f0f2f6; }
-    .stButton>button { border-radius: 20px; border: 2px solid #4CAF50; background-color: white; color: black; }
-    .stButton>button:hover { background-color: #4CAF50; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
+# --- KONFIGURÁCIÓ ---
 TOPICS = ["🌍 Environment", "🏙️ Lifestyle", "💼 Career", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Technology"]
 
 LEVELS = {
@@ -31,12 +24,12 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    for key in ["messages", "current_mode", "user_level", "chat_topic", "last_image_url", "intro_done"]:
+    for key in ["messages", "current_mode", "user_level", "chat_topic", "last_image_url"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
 
     def speak_text(text):
-        clean_text = re.sub(r'\*.*?\*', '', text).replace("?", ".").replace("!", ".").strip()
+        clean_text = re.sub(r'\*.*?\*', '', text).replace("?", ".").replace("!", ".").replace(":", ".").strip()
         tts = gTTS(text=clean_text if clean_text else "I am listening", lang='en', tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
@@ -45,7 +38,7 @@ if api_key:
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        full_instr = f"{system_instruction} Level: {LEVELS.get(st.session_state.user_level)}. Use *italics for actions*. NO emojis. If mode is Picture, DO NOT describe the image, wait for the student to do it."
+        full_instr = f"{system_instruction} Level: {LEVELS.get(st.session_state.user_level, 'B2')}. Use *italics for actions*. If the mode is Picture, DO NOT describe it, ask the student to do it."
         history = [{"role": "system", "content": full_instr}]
         for m in st.session_state.messages[-10:]:
             history.append({"role": m["role"], "content": m["content"]})
@@ -53,36 +46,29 @@ if api_key:
         data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.7}
         return requests.post(url, headers=headers, data=json.dumps(data)).json()['choices'][0]['message']['content']
 
-    # --- ÜDVÖZLÉS ---
-    if not st.session_state.intro_done:
-        st.image("https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800", width=400)
-        st.title("Hello! I'm your Speaking Buddy! 🇬🇧")
-        st.subheader("I'm here to help you practice English for exams or just for fun.")
-        if st.button("Let's start!"):
-            st.session_state.intro_done = True
+    # --- SIDEBAR ---
+    with st.sidebar:
+        st.title("🇬🇧 Speaking Buddy")
+        st.write("Created by: **ReHi**")
+        if st.button("🗑️ Reset Everything"):
+            for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
-    # --- SZINTFELMÉRŐ / VÁLASZTÓ ---
-    elif not st.session_state.user_level:
-        st.subheader("How should we start?")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("Choose manually:")
-            for l in LEVELS.keys():
-                if st.button(l, use_container_width=True):
-                    st.session_state.user_level = l
-                    st.rerun()
-        with col2:
-            st.write("Not sure?")
-            if st.button("🔍 Assess my level (3 questions)", use_container_width=True):
-                st.session_state.user_level = "Assessment"
-                ans = call_groq("Start a level assessment. Ask a simple question.", "Level Assessor Mode.")
-                st.session_state.messages.append({"role": "assistant", "content": ans})
+    # --- FLOW ---
+    if not st.session_state.user_level:
+        st.subheader("Welcome! Please set your English level:")
+        cols = st.columns(3)
+        lvls = list(LEVELS.keys())
+        for i, l in enumerate(lvls):
+            if cols[i%3].button(l, use_container_width=True):
+                st.session_state.user_level = l
                 st.rerun()
+        if st.button("🔍 Not sure? Assess my level"):
+            st.session_state.user_level = "B2 (Upper-Int)" # Ideiglenes, amíg a felmérő login nem fut le
+            st.rerun()
 
-    # --- MÓD VÁLASZTÓ ---
-    elif not st.session_state.current_mode and st.session_state.user_level != "Assessment":
-        st.subheader("What's the plan for today?")
+    elif not st.session_state.current_mode:
+        st.subheader("Choose your practice mode:")
         m_cols = st.columns(4)
         modes = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat"]
         for i, m in enumerate(modes):
@@ -90,32 +76,25 @@ if api_key:
                 st.session_state.current_mode = re.sub(r'[^\w\s]', '', m).strip()
                 st.rerun()
 
-    # --- TÉMA VÁLASZTÓ ---
-    elif not st.session_state.chat_topic and st.session_state.user_level != "Assessment":
-        st.subheader(f"Topic for {st.session_state.current_mode}:")
+    elif not st.session_state.chat_topic:
+        st.subheader(f"Select a topic for {st.session_state.current_mode}:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
+            clean_t = re.sub(r'[^\w\s]', '', topic).strip()
             if t_cols[idx%3].button(topic, use_container_width=True):
-                st.session_state.chat_topic = re.sub(r'[^\w\s]', '', topic).strip()
+                st.session_state.chat_topic = clean_t
                 if st.session_state.current_mode == "Picture":
-                    st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/professional_exam_photo_about_{st.session_state.chat_topic}_no_animals_unless_requested?width=800&height=600&seed={idx}"
-                    ans = call_groq("I've generated a picture. Tell the student to describe it. DON'T describe it yourself!", "Examiner Mode.")
+                    # KÉP LINKJEK HELYE (Ide írhatod majd a GitHub linkeket témák szerint)
+                    st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/professional_exam_photo_about_{clean_t}?width=800&height=600&seed={random.randint(1,1000)}"
+                    ans = call_groq("I have a picture for you. Please describe what you see!", "Examiner mode.")
                 else:
-                    prompts = {"Chat": "Start a chat.", "Situation": "Start a roleplay.", "Debate": "Give me a controversial statement to argue about."}
-                    ans = call_groq(prompts.get(st.session_state.current_mode), "English Partner.")
+                    prompts = {"Chat": f"Start a chat about {clean_t}.", "Situation": f"Roleplay: {clean_t}.", "Debate": f"Let's debate: {clean_t}. Start with a statement."}
+                    ans = call_groq(prompts.get(st.session_state.current_mode), "Language Partner.")
                 st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
-    # --- CHAT ---
     else:
-        with st.sidebar:
-            st.title("Buddy Panel")
-            st.write(f"Level: **{st.session_state.user_level}**")
-            if st.button("🔄 Change Mode/Topic"):
-                st.session_state.current_mode = None
-                st.session_state.chat_topic = None
-                st.rerun()
-
+        # CHAT INTERFACE
         if st.session_state.current_mode == "Picture" and st.session_state.last_image_url:
             st.image(st.session_state.last_image_url)
 
@@ -125,15 +104,25 @@ if api_key:
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-        audio_input = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
-        text_input = st.chat_input("Write here...")
-        user_msg = text_input if text_input else None # (Whisper hívás ide jönne)
+        input_col, mic_col = st.columns([0.85, 0.15])
+        with mic_col:
+            audio_input = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key="mic")
+        with input_col:
+            text_input = st.chat_input("Your turn...")
+
+        user_msg = text_input if text_input else None
+        if audio_input and not text_input:
+            user_msg = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", 
+                                     headers={"Authorization": f"Bearer {api_key}"}, 
+                                     files={"file": ("audio.wav", audio_input['bytes'], "audio/wav"), 
+                                            "model": (None, "whisper-large-v3"), "language": (None, "en")}).json().get("text", "")
 
         if user_msg:
             st.session_state.messages.append({"role": "user", "content": user_msg})
-            # Itt a szintfelmérő logika vagy a sima válasz...
-            answer = call_groq(user_msg, "Respond to the student.")
+            system_p = f"You are a partner in {st.session_state.current_mode} mode."
+            if "HELP" in user_msg.upper(): system_p = "Provide grammar feedback."
+            answer = call_groq(user_msg, system_p)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
 
-    st.markdown("<hr><p style='text-align: center; color: grey;'>© 2026 Speaking Buddy App by ReHi</p>", unsafe_allow_html=True)
+    st.markdown(f"<br><hr><p style='text-align: center; color: grey; font-size: 12px;'>© 2026 Speaking Buddy App by ReHi | All Rights Reserved</p>", unsafe_allow_html=True)

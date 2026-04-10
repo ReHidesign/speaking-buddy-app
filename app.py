@@ -2,75 +2,62 @@ import streamlit as st
 import google.generativeai as genai
 
 # --- OLDAL BEÁLLÍTÁSAI ---
-st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧", layout="centered")
+st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
 # --- COPYRIGHT LÁBLÉC ---
-footer = """
-<style>
-.footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: white;
-    color: grey;
-    text-align: center;
-    padding: 10px;
-    font-size: 12px;
-    border-top: 1px solid #eee;
-}
-</style>
-<div class="footer">
-    <p>© 2026 Speaking Buddy AI Mentor | All Rights Reserved | Educational Tool</p>
-</div>
-"""
-st.markdown(footer, unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: white; color: grey; text-align: center; padding: 10px; font-size: 12px; border-top: 1px solid #eee; }
+    </style>
+    <div class="footer"><p>© 2026 Speaking Buddy AI Mentor | All Rights Reserved</p></div>
+    """, unsafe_allow_html=True)
 
 # --- API BEÁLLÍTÁS ---
-# Ide jön majd az API kulcsod titkosítva, de teszthez beírhatod a sidebarba
 api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 
 if api_key:
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash') # A Flash gyorsabb és ingyenesebb
+    try:
+        genai.configure(api_key=api_key)
+        # Próbáljuk a legbiztosabb modell nevet
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
 
-    # --- INSTRUKCIÓK ---
-    system_prompt = "You are a professional English Speaking Buddy for high school students. Always encourage them, use simple feedback, and end with a question. Modes: Casual Chat, Challenge Mode, Picture Lab, Level Test."
+        system_instruction = "You are Speaking Buddy, a friendly English mentor. Correct errors briefly and always end with a question."
 
-    # Chat memória kezelése
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
 
-    # --- GOMBOK ---
-    st.subheader("Choose a mode:")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("📈 Test"):
-            st.session_state.messages.append({"role": "user", "content": "I want to start a Level Test."})
-    with col2:
-        if st.button("🎮 Game"):
-            st.session_state.messages.append({"role": "user", "content": "Let's play Challenge Mode."})
-    with col3:
-        if st.button("🖼️ Picture"):
-            st.session_state.messages.append({"role": "user", "content": "I want to do a Picture Lab task."})
-    with col4:
-        if st.button("💬 Chat"):
-            st.session_state.messages.append({"role": "user", "content": "Let's just have a casual conversation."})
+        # Módválasztó gombok
+        st.subheader("Choose a mode:")
+        cols = st.columns(4)
+        modes = {"📈 Test": "Start a Level Test", "🎮 Game": "Challenge Mode", "🖼️ Picture": "Picture Lab", "💬 Chat": "Casual conversation"}
+        
+        for i, (label, cmd) in enumerate(modes.items()):
+            if cols[i].button(label):
+                st.session_state.messages.append({"role": "user", "content": cmd})
 
-    # Chat megjelenítése
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+        # Chat előzmények
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.write(message["content"])
 
-    # Bevitel
-    if prompt := st.chat_input("Speak to me..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.write(prompt)
+        # Üzenetküldés
+        if prompt := st.chat_input("Write here..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.write(prompt)
 
-        with st.chat_message("assistant"):
-            response = model.generate_content([system_prompt] + [m["content"] for m in st.session_state.messages])
-            st.write(response.text)
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            with st.chat_message("assistant"):
+                try:
+                    # Ez a formátum stabilabb a Streamlit felhőben
+                    chat = model.start_chat(history=[])
+                    full_prompt = f"{system_instruction}\n\nUser says: {prompt}"
+                    response = chat.send_message(full_prompt)
+                    st.write(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                except Exception as ai_err:
+                    st.error(f"AI Error: {ai_err}")
+                
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
 else:
-    st.info("Kérlek, add meg az API kulcsot a bal oldali sávban az indításhoz!")
+    st.info("Kérlek, add meg az API kulcsot a bal oldalon!")

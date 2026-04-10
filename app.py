@@ -65,20 +65,26 @@ if api_key:
             "Balanced": "Subtly correct major mistakes in your response.",
             "Teacher Mode": "Correct grammar mistakes clearly before answering."
         }
+        
+        # JAVÍTOTT SZITUÁCIÓS INSTRUKCIÓ
+        mode_specific = ""
+        if st.session_state.current_mode == "Situation":
+            mode_specific = "Act as a partner in a roleplay. Briefly set the scene, then immediately start the conversation in character. Do not just describe the task, participate in it!"
+        
         full_instr = (
-            f"{system_instruction} Student level: {st.session_state.user_level}. "
+            f"{system_instruction} {mode_specific} Student level: {st.session_state.user_level}. "
             f"Feedback style: {feedback_instr[st.session_state.feedback_level]}. "
             "IF the student says 'HELP': Explain grammar errors. "
             "IF the student says 'finished': Provide a Task Summary."
         )
+        
         history = [{"role": "system", "content": full_instr}]
-        for m in st.session_state.messages[-8:]: # Kicsit rövidebb memória a stabilitásért
-            history.append({"role": m["role"], "content": m["content"]})
+        history.extend(st.session_state.messages[-6:]) # Még rövidebb memória a stabilitásért
         if prompt: history.append({"role": "user", "content": prompt})
         
-        data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.7}
+        data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.8}
         try:
-            r = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+            r = requests.post(url, headers=headers, data=json.dumps(data), timeout=20)
             res = r.json()
             if 'choices' in res: return res['choices'][0]['message']['content']
             return "*(Buddy apologizes)* I had a momentary lapse. Could you say that again?"
@@ -118,7 +124,7 @@ if api_key:
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-container'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>Speaking Buddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.write("### Welcome!")
-        st.write("I am here to help you practice **English speaking** and focus on **real-life communication**. Whether you want to **debate**, roleplay a **situation**, describe a **picture**, or just have a **friendly chat**, I'm ready!")
+        st.write("I am here to help you practice **English speaking**. Whether you want to **debate**, roleplay a **situation**, or just have a **chat**, I'm ready!")
         if st.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
@@ -130,24 +136,17 @@ if api_key:
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
-        st.markdown("---")
-        if st.button("🔍 Assess my level (Chat with Buddy)", use_container_width=True):
-            st.session_state.user_level = "B1 (Intermediate)" 
-            st.session_state.current_mode = "Assessment"
-            ans = call_groq("Hello! Can you help me find out my English level through a short conversation?", "Level Evaluator.")
-            st.session_state.messages.append({"role": "assistant", "content": ans})
-            st.rerun()
 
     elif not st.session_state.current_mode:
         st.subheader("Choose your practice mode:")
-        m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat", "🗣️ Slang & Idioms"]
+        m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat"]
         cols = st.columns(2)
         for i, m in enumerate(m_list):
             if cols[i%2].button(m, use_container_width=True):
                 st.session_state.current_mode = m.split()[-1]
                 st.rerun()
 
-    elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
+    elif not st.session_state.chat_topic:
         st.subheader(f"Select a topic for {st.session_state.current_mode}:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):

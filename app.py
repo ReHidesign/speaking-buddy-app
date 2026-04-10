@@ -4,22 +4,25 @@ import json
 from gtts import gTTS
 import io
 from streamlit_mic_recorder import mic_recorder
+import re
 
-st.set_page_config(page_title="Speaking Buddy v3", page_icon="🇬🇧")
+st.set_page_config(page_title="Speaking Buddy v4", page_icon="🇬🇧")
 
 # --- KONFIGURÁCIÓ ---
 TOPICS = [
     "✈️ Travel & Tourism", "🍔 Food & Cooking", "🎬 Movies & Entertainment", 
     "⚽ Sports & Health", "💻 Technology & AI", "🏠 Home & Family",
-    "🎓 Education & Learning", "💼 Work & Career", "🌍 Environment"
+    "🎓 Education & Learning", "💼 Work & Career", "🌍 Environment",
+    "⚖️ Politics & Society", "🎭 Arts & Culture"
 ]
 
 LEVELS = {
-    "A1 (Beginner)": "Use very simple words, short sentences. Focus on basic vocabulary.",
-    "A2 (Pre-Intermediate)": "Simple English, but use connected sentences. Clear and slow.",
-    "B1 (Intermediate)": "Standard English. Use common idioms and more complex structures.",
-    "B2 (Upper-Intermediate)": "Natural, fast English with advanced vocabulary and phrasal verbs.",
-    "C1 (Advanced)": "Sophisticated English, academic words, and nuanced expressions."
+    "A1 (Beginner)": "Very simple words, short sentences.",
+    "A2 (Pre-Intermediate)": "Simple English, connected sentences.",
+    "B1 (Intermediate)": "Standard everyday English.",
+    "B2 (Upper-Intermediate)": "Natural, fast English, phrasal verbs.",
+    "C1 (Advanced)": "Sophisticated English, nuanced expressions.",
+    "C2 (Proficiency)": "Academic, complex structures, professional vocabulary for OKTV level."
 }
 
 # --- API ÉS MEMÓRIA ---
@@ -36,82 +39,94 @@ if api_key:
 
     # --- FUNKCIÓK ---
     def speak_text(text):
-        # Az emojikat kiszedjük a felolvasás előtt
-        import re
-        clean_text = re.sub(r'[^\x00-\x7F]+', '', text) 
-        tts = gTTS(text=clean_text, lang='en', tld='co.uk') # Marad a brit akcentus
+        # Emojik eltávolítása a felolvasás előtt
+        clean_text = re.sub(r'[^\x00-\x7F]+', '', text)
+        tts = gTTS(text=clean_text, lang='en', tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         return fp
+
+    def call_whisper(audio_bytes):
+        url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        files = {"file": ("audio.wav", audio_bytes, "audio/wav"), "model": (None, "whisper-large-v3"), "language": (None, "en")}
+        try:
+            response = requests.post(url, headers=headers, files=files)
+            return response.json().get("text", "")
+        except: return None
 
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
-        # Szigorú utasítás: NE HASZNÁLJ EMOJIKAT!
-        full_instr = f"{system_instruction} IMPORTANT: Do not use any emojis or icons in your response. Speak at {st.session_state.user_level} level."
+        level_instr = LEVELS.get(st.session_state.user_level, "Natural English")
+        full_instr = f"{system_instruction} Level: {level_instr}. IMPORTANT: No emojis. If the user asks for HELP, start with a friendly grammar correction."
         
         history = [{"role": "system", "content": full_instr}]
         for m in st.session_state.messages[-10:]:
             history.append({"role": m["role"], "content": m["content"]})
-        if prompt:
-            history.append({"role": "user", "content": prompt})
+        if prompt: history.append({"role": "user", "content": prompt})
         
         data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.5}
         response = requests.post(url, headers=headers, data=json.dumps(data))
         return response.json()['choices'][0]['message']['content']
 
-    # --- SIDEBAR & RESET ---
+    # --- SIDEBAR ---
     st.sidebar.title("🇬🇧 Speaking Buddy")
     if st.session_state.user_level:
-        st.sidebar.success(f"Current Level: {st.session_state.user_level}")
+        st.sidebar.info(f"Level: **{st.session_state.user_level}**")
+    
+    st.sidebar.write("---")
+    if st.sidebar.button("🆘 Get Help (Grammar Check)"):
+        st.sidebar.warning("Type 'HELP' at the end of your message!")
     
     if st.sidebar.button("🗑️ Reset Everything"):
-        for key in st.session_state.keys(): del st.session_state[key]
+        for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
 
-    # --- 1. LÉPÉS: SZINT MEGHATÁROZÁSA ---
+    # --- 1. LÉPÉS: SZINT VÁLASZTÁS ---
     if not st.session_state.user_level:
-        st.subheader("Welcome! First, let's set your English level:")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("### Choose manually:")
+        st.subheader("Welcome! Please set your level:")
+        cols = st.columns(2)
+        with cols[0]:
+            st.markdown("### Manual Selection")
             for lvl in LEVELS.keys():
-                if st.button(lvl):
+                if st.button(lvl, use_container_width=True):
                     st.session_state.user_level = lvl
                     st.rerun()
-        
-        with col2:
-            st.write("### Assessment:")
-            if st.button("🔍 Assess my level (3 questions)"):
+        with cols[1]:
+            st.markdown("### Not sure?")
+            if st.button("🔍 Assess my level (3 questions)", use_container_width=True):
                 st.session_state.user_level = "Assessment in progress"
-                ans = call_groq("Start the level assessment.", "You are an examiner. Ask the user 3 simple questions one by one to find their level. Start with the first question.")
+                ans = call_groq("Start assessment.", "Ask 3 questions to find the user's CEFR level.")
                 st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
     # --- 2. LÉPÉS: MÓD VÁLASZTÁS ---
     elif st.session_state.user_level and not st.session_state.current_mode:
-        st.subheader(f"Level: {st.session_state.user_level}. Choose a mode:")
-        m_col = st.columns(4)
-        if m_col[0].button("📈 Test"): st.session_state.current_mode = "Test"
-        if m_col[1].button("🎮 Game"): st.session_state.current_mode = "Game"
-        if m_col[2].button("🖼️ Picture"): st.session_state.current_mode = "Picture"
-        if m_col[3].button("💬 Chat"): st.session_state.current_mode = "Chat"
-        if any(m_col): st.rerun()
+        st.subheader("Pick a mode:")
+        m_cols = st.columns(4)
+        modes = ["📈 Test", "🎮 Game", "🖼️ Picture", "💬 Chat"]
+        for i, m in enumerate(modes):
+            if m_cols[i].button(m, use_container_width=True):
+                st.session_state.current_mode = m
+                if m != "Chat":
+                    ans = call_groq("Hello!", f"Start a {m} session.")
+                    st.session_state.messages.append({"role": "assistant", "content": ans})
+                st.rerun()
 
-    # --- 3. LÉPÉS: TÉMA VÁLASZTÁS (Ha Chat mód) ---
+    # --- 3. LÉPÉS: TÉMA VÁLASZTÁS (Chat) ---
     elif st.session_state.current_mode == "Chat" and not st.session_state.chat_topic:
-        st.subheader("What topic shall we discuss?")
+        st.subheader("Choose a topic:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
-            if t_cols[idx % 3].button(topic):
+            if t_cols[idx % 3].button(topic, use_container_width=True):
                 st.session_state.chat_topic = topic
-                ans = call_groq(f"I want to talk about {topic}.", f"Conversation partner at {st.session_state.user_level} level.")
+                ans = call_groq(f"Let's talk about {topic}.", "Be a partner.")
                 st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
-    # --- CHAT ÉS BEVITEL ---
+    # --- CHAT FÜLET ---
     if st.session_state.user_level and (st.session_state.current_mode or st.session_state.user_level == "Assessment in progress"):
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
@@ -119,11 +134,25 @@ if api_key:
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
+        st.write("---")
         input_col, mic_col = st.columns([0.85, 0.15])
         with mic_col:
-            # streamlit-mic-recorder vagy Whisper hívás ide jön (lásd előző kód)
             audio_input = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key=f"rec_{len(st.session_state.messages)}")
         
-        text_input = st.chat_input("Speak or write...")
+        text_input = st.chat_input("Message Buddy...")
         
-        # (Whisper hívás és Groq válasz logika ugyanaz, mint az előző verzióban)
+        user_msg = text_input if text_input else (call_whisper(audio_input['bytes']) if audio_input else None)
+
+        if user_msg:
+            st.session_state.messages.append({"role": "user", "content": user_msg})
+            
+            # Dinamikus instrukció a mód alapján
+            base = f"Partner in {st.session_state.current_mode} mode."
+            if "HELP" in user_msg.upper():
+                base = "FIRST: Correct mistakes briefly. THEN: Continue the talk."
+            
+            answer = call_groq(user_msg, base)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.rerun()
+
+    st.markdown("<p style='text-align: center; color: grey; font-size: 10px;'>© 2024 Speaking Buddy App</p>", unsafe_allow_html=True)

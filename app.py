@@ -4,7 +4,7 @@ import json
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
-# Most Groq kulcsot kérünk
+# Bal oldali sáv a kulcsnak
 api_key = st.sidebar.text_input("Enter Groq API Key (gsk_...):", type="password")
 
 if api_key:
@@ -21,30 +21,54 @@ if api_key:
             "Content-Type": "application/json"
         }
         data = {
-            "model": "llama-3.3-70b-versatile", # Ez egy bivalyerős modell
-            "messages": [{"role": "user", "content": prompt}]
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": "You are a friendly English mentor. Keep answers short and encouraging."},
+                {"role": "user", "content": prompt}
+            ]
         }
-        
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        if response.status_code == 200:
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data))
             return response.json()['choices'][0]['message']['content']
-        else:
-            return f"Hiba: {response.status_code} - {response.text}"
+        except:
+            return "Oops, something went wrong. Try again!"
+
+    # Gombok és a hozzájuk tartozó parancsok
+    if cols[0].button("📈 Test"):
+        st.session_state.messages = []
+        ans = call_groq("Start a short English level test with 3 easy questions!")
+        st.session_state.messages.append({"role": "assistant", "content": ans})
 
     if cols[1].button("🎮 Game"):
         st.session_state.messages = []
-        answer = call_groq("You are a lost tourist in London. Ask me for help in English!")
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        ans = call_groq("You are a lost tourist in London. Start a conversation by asking me for help!")
+        st.session_state.messages.append({"role": "assistant", "content": ans})
 
+    if cols[2].button("🖼️ Picture"):
+        st.session_state.messages = []
+        ans = call_groq("Describe a famous painting in English and ask me what I think about it!")
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+
+    if cols[3].button("💬 Chat"):
+        st.session_state.messages = []
+        ans = call_groq("Hello! Introduce yourself as my Speaking Buddy and ask me how my day was.")
+        st.session_state.messages.append({"role": "assistant", "content": ans})
+
+    # Chat megjelenítése
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]): st.write(msg["content"])
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
 
-    if prompt := st.chat_input("Speak..."):
+    # Folyamatos beszélgetés
+    if prompt := st.chat_input("Write back to Buddy..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"): st.write(prompt)
+        with st.chat_message("user"):
+            st.write(prompt)
+        
         with st.chat_message("assistant"):
-            answer = call_groq("You are an English teacher. " + prompt)
+            # Itt elküldjük az utolsó üzenetet a Buddynak
+            answer = call_groq(prompt)
             st.write(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
 else:
-    st.info("Please enter your Groq API Key on the left!")
+    st.info("Kérlek, add meg a Groq API kulcsodat (gsk_...) a bal oldalon!")

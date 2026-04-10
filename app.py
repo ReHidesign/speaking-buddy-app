@@ -4,7 +4,8 @@ import json
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
-api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
+# Most Groq kulcsot kérünk
+api_key = st.sidebar.text_input("Enter Groq API Key (gsk_...):", type="password")
 
 if api_key:
     if "messages" not in st.session_state:
@@ -13,43 +14,37 @@ if api_key:
     st.subheader("Choose a mode:")
     cols = st.columns(4)
     
-    # Közvetlen API hívás függvény - ez nem tud "elromlani" a verziók miatt
-    def call_gemini_direct(prompt):
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-        headers = {'Content-Type': 'application/json'}
-        data = {"contents": [{"parts":[{"text": prompt}]}]}
+    def call_groq(prompt):
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "llama-3.3-70b-versatile", # Ez egy bivalyerős modell
+            "messages": [{"role": "user", "content": prompt}]
+        }
         
         response = requests.post(url, headers=headers, data=json.dumps(data))
         if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
+            return response.json()['choices'][0]['message']['content']
         else:
-            return f"Error: {response.status_code} - {response.text}"
+            return f"Hiba: {response.status_code} - {response.text}"
 
-    # Gombok beállítása
-    modes = {"📈 Test": "Start an English test!", 
-             "🎮 Game": "You are a lost tourist. Ask me for help!", 
-             "🖼️ Picture": "Describe a picture for me!", 
-             "💬 Chat": "Hi!"}
+    if cols[1].button("🎮 Game"):
+        st.session_state.messages = []
+        answer = call_groq("You are a lost tourist in London. Ask me for help in English!")
+        st.session_state.messages.append({"role": "assistant", "content": answer})
 
-    for i, (label, text) in enumerate(modes.items()):
-        if cols[i].button(label):
-            st.session_state.messages = []
-            answer = call_gemini_direct(text)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-
-    # Chat megjelenítése
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.write(msg["content"])
+        with st.chat_message(msg["role"]): st.write(msg["content"])
 
-    # Üzenetküldés
-    if prompt := st.chat_input("Speak to Buddy..."):
+    if prompt := st.chat_input("Speak..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"): st.write(prompt)
-        
         with st.chat_message("assistant"):
-            answer = call_gemini_direct("You are an English teacher. " + prompt)
+            answer = call_groq("You are an English teacher. " + prompt)
             st.write(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
 else:
-    st.info("Kérlek, add meg az API kulcsot!")
+    st.info("Please enter your Groq API Key on the left!")

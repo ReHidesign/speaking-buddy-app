@@ -4,7 +4,6 @@ import json
 from gtts import gTTS
 import io
 from streamlit_mic_recorder import mic_recorder
-from pydub import AudioSegment
 
 st.set_page_config(page_title="Speaking Buddy", page_icon="🇬🇧")
 
@@ -19,44 +18,32 @@ if api_key:
         st.session_state.messages = []
     if "current_mode" not in st.session_state:
         st.session_state.current_mode = None
-    if "whisper_text" not in st.session_state:
-        st.session_state.whisper_text = ""
 
     # --- FUNKCIÓK ---
     
-    # Text-to-Speech (Buddy hangja)
+    # Buddy hangja (Text-to-Speech)
     def speak_text(text):
         tts = gTTS(text=text, lang='en', tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
         return fp
 
-    # Speech-to-Text (A te hangod -> szöveg)
+    # A Te hangod feldolgozása (Speech-to-Text / Whisper)
     def call_whisper(audio_bytes):
         url = "https://api.groq.com/openai/v1/audio/transcriptions"
         headers = {"Authorization": f"Bearer {api_key}"}
-        
-        # Audioformátum konvertálása (szükség esetén pydub-bal)
-        # Ez a rész trükkös lehet a böngészők miatt, de kezdjük az alapokkal
         files = {
             "file": ("audio.wav", audio_bytes, "audio/wav"),
             "model": (None, "whisper-large-v3"),
-            "language": (None, "en"),
-            "response_format": (None, "json")
+            "language": (None, "en")
         }
-        
         try:
             response = requests.post(url, headers=headers, files=files)
-            if response.status_code == 200:
-                return response.json().get("text", "")
-            else:
-                st.error(f"Whisper Error: {response.status_code}")
-                return ""
-        except Exception as e:
-            st.error(f"Error calling Whisper: {e}")
-            return ""
+            return response.json().get("text", "")
+        except:
+            return None
 
-    # Szöveg hívása (Buddy válasza)
+    # Buddy válasza (LLM)
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -66,24 +53,24 @@ if api_key:
         if prompt:
             history.append({"role": "user", "content": prompt})
         
-        data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.7}
+        data = {"model": "llama-3.3-70b-versatile", "messages": history, "temperature": 0.8}
         response = requests.post(url, headers=headers, data=json.dumps(data))
         return response.json()['choices'][0]['message']['content']
 
-    # --- OLDALSÁV ÉS ÜZEMMÓDOK ---
+    # --- UI ÉS OLDALSÁV ---
     st.sidebar.title("🇬🇧 Speaking Buddy")
-    st.sidebar.info("💡 **TIP:** Type 'HELP' (any case) in your message or say it for corrections!")
+    st.sidebar.info("💡 **TIP:** Type or say **'HELP'** if you want me to check your English!")
+    
     if st.sidebar.button("🗑️ Reset Conversation"):
         st.session_state.messages = []
-        st.session_state.whisper_text = ""
         st.rerun()
 
-    # Módok instrukciói
+    # Módok
     modes = {
-        "📈 Test": "Assessor mode.",
-        "🎮 Game": "You are a lost tourist in London. STAY IN CHARACTER. Start somewhere new (e.g., Hyde Park).",
-        "🖼️ Picture": "IMPORTANT: The user will describe an image. Wait for their input and respond to it.",
-        "💬 Chat": "Casual conversation friend."
+        "📈 Test": "Friendly English teacher. Check the user's level with 2-3 questions.",
+        "🎮 Game": "You are a lost, slightly tired tourist in London. Be natural, not like a bot. Start at a random location like Hyde Park.",
+        "🖼️ Picture": "Ask the user to describe a scene from their imagination or a famous place. You provide feedback.",
+        "💬 Chat": "A cool, friendly Londoner. Talk about movies, food, or hobbies."
     }
 
     st.subheader("Choose your practice mode:")
@@ -92,64 +79,51 @@ if api_key:
         if cols[i].button(label):
             st.session_state.messages = []
             st.session_state.current_mode = label
-            st.session_state.whisper_text = ""
-            
-            # Képes feladatnál nem generálunk kezdő szöveget
-            if label != "🖼️ Picture":
-                ans = call_groq("Start!", instr)
-                st.session_state.messages.append({"role": "assistant", "content": ans})
-            else:
-                st.session_state.messages.append({"role": "assistant", "content": "Welcome to Picture Mode! I'm showing you an image. Please describe what you see or how it makes you feel."})
-                # Itt majd meg kell jelenítenünk a képet
-                st.info("Imagine a beautiful picture of the Swiss Alps here.")
+            ans = call_groq("Hello!", instr)
+            st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    # --- CHAT ÉS HANG ---
+    # --- CHAT MEGJELENÍTÉSE ---
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
             if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                 st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-    # --- BEVITEL (MIKROFON ÉS SZÖVEG) ---
+    # --- BEVITEL (SZÖVEG + MIKROFON) ---
     st.write("---")
+    input_col, mic_col = st.columns([0.85, 0.15])
     
-    # Mikrofon rögzítő
-    audio = mic_recorder(start_prompt="🎤 Record", stop_prompt="🛑 Stop", key='recorder')
-    
-    # Ha van felvétel, elküldjük a Whisper-nek
-    if audio and st.session_state.whisper_text == "":
-        with st.spinner("Transcribing your voice..."):
-            text_from_voice = call_whisper(audio['bytes'])
-            if text_from_voice:
-                st.session_state.whisper_text = text_from_voice
-                st.rerun() # Frissítünk, hogy a szöveg megjelenjen a dobozban
+    with mic_col:
+        audio_input = mic_recorder(start_prompt="🎤", stop_prompt="🛑", key='recorder')
 
-    # Szöveges beviteli mező (amibe a Whisper is beírja a szöveget)
-    prompt = st.chat_input("Type here...", key="chat_input")
-    
-    # Ha a Whisper-ből jött szöveg, azt használjuk
-    final_prompt = prompt if prompt else st.session_state.whisper_text
+    with input_col:
+        text_input = st.chat_input("Write or speak to Buddy...")
 
-    if final_prompt:
-        st.session_state.messages.append({"role": "user", "content": final_prompt})
-        st.session_state.whisper_text = "" # Töröljük a Whisper szöveget a következő körre
+    # Bemenet feldolgozása (vagy szöveg, vagy hang)
+    user_msg = None
+    if text_input:
+        user_msg = text_input
+    elif audio_input:
+        with st.spinner("Buddy is listening..."):
+            user_msg = call_whisper(audio_input['bytes'])
+
+    if user_msg:
+        st.session_state.messages.append({"role": "user", "content": user_msg})
         
+        # HELP logika
         current_instr = modes.get(st.session_state.current_mode, "Friendly assistant.")
-        if "HELP" in final_prompt.upper():
-            final_instr = f"CRITICAL: User needs help! First, briefly correct their grammar/vocabulary. Then continue as: {current_instr}"
+        if "HELP" in user_msg.upper():
+            final_instr = f"First, friendly correct any English mistakes in the user's message. Then: {current_instr}"
         else:
             final_instr = current_instr
 
-        with st.chat_message("assistant"):
-            answer = call_groq(final_prompt, final_instr)
-            st.write(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            st.rerun()
+        answer = call_groq(user_msg, final_instr)
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.rerun()
 
     # --- COPYRIGHT ---
-    st.markdown("---")
-    st.markdown("<p style='text-align: center; color: grey;'>© 2024 Speaking Buddy App - All Rights Reserved</p>", unsafe_allow_html=True)
+    st.markdown("<br><br><p style='text-align: center; color: grey; font-size: 12px;'>© 2024 Speaking Buddy App - All Rights Reserved</p>", unsafe_allow_html=True)
 
 else:
-    st.warning("API Key needed!")
+    st.warning("Please enter your Groq API Key in the sidebar!")

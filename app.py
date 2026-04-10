@@ -4,77 +4,91 @@ import time
 
 st.set_page_config(page_title="Speaking Buddy AI", page_icon="🇬🇧")
 
-# API Kulcs kezelése
 api_key = st.sidebar.text_input("Enter Gemini API Key:", type="password")
 
 if api_key:
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.5-flash')
-
-        # A PROFI INSTRUKCIÓ (A "Lélek")
-        system_instruction = """
-        Te egy Speaking Buddy nevű angol mentor vagy. 
-        SZABÁLY: Mindig javítsd ki a diák hibáit az üzeneted elején!
-        MÓDOK:
-        - Start Level Test: 5 kérdéses szintfelmérő.
-        - Challenge Mode: Te egy karakter vagy (pl. elveszett turista). Indítsd te a párbeszédet!
-        - Picture Lab: Írj le egy képet, amit neki le kell írnia.
-        """
-
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        # --- ITT VAN AZ ÖSSZES GOMB ÚJRA ---
-        st.subheader("Choose a mode:")
-        cols = st.columns(4)
         
-        if cols[0].button("📈 Test"):
-            st.session_state.messages = [{"role": "user", "content": "START TEST"}]
-            response = model.generate_content(system_instruction + " Start the Level Test with the first question!")
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+        # --- GOLYÓÁLLÓ MODELL VÁLASZTÓ ---
+        if "active_model" not in st.session_state:
+            # Végigpróbáljuk a leggyakoribb neveket
+            potential_names = ['gemini-1.5-flash', 'models/gemini-1.5-flash', 'gemini-pro']
+            found_model = None
+            for name in potential_names:
+                try:
+                    m = genai.GenerativeModel(name)
+                    m.generate_content("test", generation_config={"candidate_count": 1})
+                    found_model = name
+                    break
+                except:
+                    continue
+            st.session_state.active_model = found_model
 
-        if cols[1].button("🎮 Game"):
-            st.session_state.messages = [{"role": "user", "content": "START GAME"}]
-            response = model.generate_content(system_instruction + " Start the game as a lost tourist in London!")
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+        if not st.session_state.active_model:
+            st.error("Nem sikerült elérhető AI modellt találni. Ellenőrizd az API kulcsod!")
+        else:
+            model = genai.GenerativeModel(st.session_state.active_model)
 
-        if cols[2].button("🖼️ Picture"):
-            st.session_state.messages = [{"role": "user", "content": "START PICTURE LAB"}]
-            response = model.generate_content(system_instruction + " Describe a picture for me to talk about!")
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            system_instruction = """
+            Te egy Speaking Buddy nevű angol mentor vagy. 
+            SZABÁLY: Mindig javítsd ki a diák hibáit az üzeneted elején!
+            MÓDOK:
+            - Start Level Test: 5 kérdéses szintfelmérő.
+            - Challenge Mode: Te egy karakter vagy (pl. elveszett turista).
+            - Picture Lab: Írj le egy képet.
+            """
 
-        if cols[3].button("💬 Chat"):
-            st.session_state.messages = [{"role": "user", "content": "Casual conversation"}]
-            st.session_state.messages.append({"role": "assistant", "content": "Hi! I'm your Speaking Buddy. What's on your mind?"})
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
 
-        # Chat megjelenítése (elrejtve a belső parancsokat)
-        for msg in st.session_state.messages:
-            if "START " not in msg["content"]:
-                with st.chat_message(msg["role"]):
-                    st.write(msg["content"])
+            # Gombok
+            st.subheader("Choose a mode:")
+            cols = st.columns(4)
+            modes = [
+                ("📈 Test", "Start the Level Test!"),
+                ("🎮 Game", "Start Challenge Mode: be a lost tourist!"),
+                ("🖼️ Picture", "Start Picture Lab!"),
+                ("💬 Chat", "Let's just chat!")
+            ]
 
-        # Válaszadás logikája
-        if prompt := st.chat_input("Help the tourist / Answer Buddy..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.write(prompt)
+            for i, (label, cmd) in enumerate(modes):
+                if cols[i].button(label):
+                    st.session_state.messages = [{"role": "user", "content": f"SYSTEM_CMD: {cmd}"}]
+                    try:
+                        resp = model.generate_content(system_instruction + " " + cmd)
+                        st.session_state.messages.append({"role": "assistant", "content": resp.text})
+                    except Exception as e:
+                        st.error(f"Gomb hiba: {e}")
 
-            with st.chat_message("assistant"):
-                # Előzmények összefűzése a memóriához
-                history_text = system_instruction + "\n"
-                for m in st.session_state.messages[-6:]:
-                    history_text += f"{m['role']}: {m['content']}\n"
-                
-                time.sleep(1) # Megelőzzük a kvóta-hibát
-                response = model.generate_content(history_text)
-                st.write(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            # Chat megjelenítése
+            for msg in st.session_state.messages:
+                if "SYSTEM_CMD" not in msg["content"]:
+                    with st.chat_message(msg["role"]):
+                        st.write(msg["content"])
+
+            # Válasz beküldése
+            if prompt := st.chat_input("Speak to Buddy..."):
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.write(prompt)
+
+                with st.chat_message("assistant"):
+                    history = system_instruction + "\n"
+                    for m in st.session_state.messages[-5:]:
+                        history += f"{m['role']}: {m['content']}\n"
+                    
+                    time.sleep(1) # Kvóta védelem
+                    response = model.generate_content(history)
+                    st.write(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
 
     except Exception as e:
-        if "429" in str(e):
-            st.error("Lassítsunk egy kicsit! A Google ingyenes rendszere várni kér kb. 30 másodpercet.")
+        if "404" in str(e):
+            st.warning("A Google még frissíti a modellt a kulcsodhoz. Próbáld meg 1 perc múlva!")
+        elif "429" in str(e):
+            st.error("Túl sok kérés! Várj 30 másodpercet.")
         else:
-            st.error(f"Hiba történt: {e}")
+            st.error(f"Hiba: {e}")
 else:
-    st.info("Kérlek, add meg az API kulcsot a kezdéshez!")
+    st.info("Kérlek, add meg az API kulcsot!")

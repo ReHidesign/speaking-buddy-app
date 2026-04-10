@@ -6,14 +6,13 @@ import io
 from streamlit_mic_recorder import mic_recorder
 import re
 
-st.set_page_config(page_title="Speaking Buddy v6", page_icon="🇬🇧")
+st.set_page_config(page_title="Speaking Buddy v7", page_icon="🇬🇧")
 
-# --- KONFIGURÁCIÓ (Bővített témák) ---
+# --- KONFIGURÁCIÓ ---
 TOPICS = [
     "✈️ Travel & Customs", "🍔 Restaurant & Food", "🎬 Entertainment", 
     "⚽ Health & Sports", "💻 Tech & Social Media", "🏠 Family & Home",
-    "💼 Work & Job Interview", "🌍 Global Issues", "🎭 Art & Fashion",
-    "🏫 School & OKTV", "🛍️ Shopping & Complaints", "🏥 At the Doctor"
+    "🌍 Global Issues", "🎭 Art & Fashion", "💼 Career & Work"
 ]
 
 LEVELS = {
@@ -22,7 +21,7 @@ LEVELS = {
     "B1 (Intermediate)": "Standard English, everyday topics.",
     "B2 (Upper-Intermediate)": "Natural, fast, idiomatic English.",
     "C1 (Advanced)": "Sophisticated, nuanced vocabulary.",
-    "C2 (Proficiency)": "Academic, complex structures, professional/OKTV level."
+    "C2 (Proficiency)": "Academic, complex structures, professional level."
 }
 
 # --- API ÉS MEMÓRIA ---
@@ -32,14 +31,13 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    # Állapotok inicializálása
     for key in ["messages", "current_mode", "user_level", "chat_topic"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
 
     # --- FUNKCIÓK ---
     def speak_text(text):
-        clean_text = re.sub(r'[^\x00-\x7F]+', '', text) # Emojik ki
+        clean_text = re.sub(r'[^\x00-\x7F]+', '', text)
         tts = gTTS(text=clean_text, lang='en', tld='co.uk')
         fp = io.BytesIO()
         tts.write_to_fp(fp)
@@ -58,7 +56,7 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         level_instr = LEVELS.get(st.session_state.user_level, "Natural English")
-        full_instr = f"{system_instruction} Current Level: {level_instr}. NO emojis. If user says 'HELP', correct them first."
+        full_instr = f"{system_instruction} Current Level: {level_instr}. NO emojis. IMPORTANT: If user says 'HELP', correct them first."
         history = [{"role": "system", "content": full_instr}]
         for m in st.session_state.messages[-10:]:
             history.append({"role": m["role"], "content": m["content"]})
@@ -67,25 +65,33 @@ if api_key:
         response = requests.post(url, headers=headers, data=json.dumps(data))
         return response.json()['choices'][0]['message']['content']
 
-    # --- SIDEBAR ---
-    st.sidebar.title("🇬🇧 Speaking Buddy")
-    if st.session_state.user_level:
-        st.sidebar.success(f"Level: {st.session_state.user_level}")
-    if st.sidebar.button("🗑️ Full Reset"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
-        st.rerun()
+    # --- SIDEBAR (Visszakerült a Help panel és a ReHi név) ---
+    with st.sidebar:
+        st.title("🇬🇧 Speaking Buddy")
+        st.info("Created by: **ReHi**")
+        
+        st.markdown("---")
+        st.warning("💡 **Tip:** Write '**HELP**' in the chat if you need grammar advice or translations!")
+        
+        if st.session_state.user_level:
+            st.success(f"Level: {st.session_state.user_level}")
+        
+        if st.button("🗑️ Full Reset"):
+            for key in list(st.session_state.keys()): del st.session_state[key]
+            st.rerun()
 
     # --- FLOW ---
-    # 1. Szint
+    # 1. Szintválasztás (Vízszintes elrendezés)
     if not st.session_state.user_level:
         st.subheader("Select your English level:")
         cols = st.columns(3)
-        for i, lvl in enumerate(LEVELS.keys()):
-            if cols[i%3].button(lvl, use_container_width=True):
-                st.session_state.user_level = lvl
+        lvls = list(LEVELS.keys())
+        for i in range(len(lvls)):
+            if cols[i % 3].button(lvls[i], use_container_width=True):
+                st.session_state.user_level = lvls[i]
                 st.rerun()
     
-    # 2. Mód
+    # 2. Módválasztás
     elif not st.session_state.current_mode:
         st.subheader("Choose your practice mode:")
         m_cols = st.columns(4)
@@ -94,26 +100,24 @@ if api_key:
                 st.session_state.current_mode = m
                 st.rerun()
 
-    # 3. Téma választás (Bármelyik módhoz!)
+    # 3. Témaválasztás (Gombok minden módhoz)
     elif not st.session_state.chat_topic:
         st.subheader(f"Choose a topic for your {st.session_state.current_mode} session:")
         t_cols = st.columns(3)
         for idx, topic in enumerate(TOPICS):
-            if t_cols[idx%3].button(topic, use_container_width=True):
+            if t_cols[idx % 3].button(topic, use_container_width=True):
                 st.session_state.chat_topic = topic
-                
-                # Instrukció generálása a mód + téma alapján
                 prompts = {
-                    "Chat": f"Let's talk about {topic}. Start a friendly discussion.",
-                    "Game": f"We are in a roleplay about {topic}. You start the scene with a problem or situation.",
-                    "Picture": f"The topic is {topic}. Describe a very detailed imaginary scene and ask me to describe it back.",
-                    "Test": f"Ask me 3 complex questions about {topic} to test my skills."
+                    "Chat": f"Start a friendly discussion about {topic}.",
+                    "Game": f"We are in a roleplay about {topic}. Start the scene as a character with a goal.",
+                    "Picture": f"The topic is {topic}. Describe a scene for me to visualize and discuss.",
+                    "Test": f"Ask 3 challenging questions about {topic}."
                 }
-                ans = call_groq(prompts[st.session_state.current_mode], "You are a professional partner.")
+                ans = call_groq(prompts[st.session_state.current_mode], "Be a helpful language partner.")
                 st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
-    # 4. A Chat felület
+    # 4. Aktív Chat felület
     else:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
@@ -132,10 +136,12 @@ if api_key:
 
         if user_msg:
             st.session_state.messages.append({"role": "user", "content": user_msg})
-            instr = f"Partner in {st.session_state.current_mode} mode about {st.session_state.chat_topic}."
-            if "HELP" in user_msg.upper(): instr = "CORRECT GRAMMAR FIRST, then continue conversation."
+            instr = f"Language partner in {st.session_state.current_mode} mode about {st.session_state.chat_topic}."
+            if "HELP" in user_msg.upper(): 
+                instr = "First, correct any grammar or spelling mistakes clearly. Then continue the conversation."
             answer = call_groq(user_msg, instr)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             st.rerun()
 
-    st.markdown("<p style='text-align: center; color: grey; font-size: 10px;'>© 2024 Speaking Buddy App - OKTV & Exam Prep Edition</p>", unsafe_allow_html=True)
+    # Copyright szekció frissítve
+    st.markdown(f"<br><hr><p style='text-align: center; color: grey; font-size: 12px;'>© 2026 Speaking Buddy App by ReHi | All Rights Reserved</p>", unsafe_allow_html=True)

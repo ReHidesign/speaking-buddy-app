@@ -9,7 +9,7 @@ import re
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: VÉGLEGES DESIGN ---
+# --- CSS: VÉGLEGES DESIGN ÉS MOBIL OPTIMALIZÁLÁS ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,6 +22,7 @@ st.markdown("""
     .sub-title { font-style: italic; opacity: 0.8; margin-top: 0px; margin-bottom: 25px; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
+    /* GOMBOK DESIGNJA */
     .stButton > button { 
         border-radius: 8px !important; 
         width: 100% !important;
@@ -33,21 +34,28 @@ st.markdown("""
         padding: 10px !important;
     }
     
-    .stButton > button:hover {
-        background-color: #2980b9 !important;
-        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4) !important;
+    /* START GOMB KÖZÉPRE */
+    .start-container {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+    div.stButton > button:has(div:contains("🚀")) {
+        max-width: 250px !important;
+        font-size: 1.2em !important;
+        height: 60px !important;
     }
 
     .status-box { 
         padding: 10px; border-radius: 10px; border-left: 5px solid #3498db; 
         margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.15);
-        font-size: 0.9em;
+        font-size: 0.85em;
     }
     
-    .help-card { 
-        padding: 12px; border-radius: 10px; border: 1px dashed #e67e22; 
-        background-color: rgba(230, 126, 34, 0.1); font-size: 13px; margin-bottom: 15px;
-        color: #e67e22; font-weight: 600;
+    .help-hint-bar {
+        text-align: center; font-size: 0.8em; color: #e67e22; 
+        font-weight: bold; margin-bottom: 10px; border: 1px dashed #e67e22;
+        border-radius: 5px; padding: 5px;
     }
 
     .footer-note { text-align: center; color: grey; font-size: 11px; margin-top: 50px; opacity: 0.8; line-height: 1.5; }
@@ -55,13 +63,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- KONFIGURÁCIÓ ---
-TOPICS = [
-    "🎲 Surprise Me (Free Chat)", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets",
-    "🌍 Environment & Nature", "🏙️ Lifestyle & Daily Routine", "💼 Jobs & Career", "🎭 Culture & Entertainment", 
-    "🏫 Education & Languages", "🛍️ Shopping & Consumer Society", "✈️ Travel & Transport", "⚽ Health & Sport", 
-    "💻 Tech & Media", "🍔 Food & Eating Out", "👗 Fashion & Clothes", "🌦️ Weather & Seasons",
-    "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"
-]
+TOPICS = ["🎲 Surprise Me (Free Chat)", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets", "🌍 Environment & Nature", "🏙️ Lifestyle & Daily Routine", "💼 Jobs & Career", "🎭 Culture & Entertainment", "🏫 Education & Languages", "🛍️ Shopping & Consumer Society", "✈️ Travel & Transport", "⚽ Health & Sport", "💻 Tech & Media", "🍔 Food & Eating Out", "👗 Fashion & Clothes", "🌦️ Weather & Seasons", "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"]
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
 if "GROQ_API_KEY" in st.secrets:
@@ -84,12 +86,8 @@ if api_key:
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        kb_mapping = """
-        Knowledge: B1: 'Twenty-three Topics'. B2: '1000 Questions B2', 'Színes B2'. C1/C2: '1000 Questions C1'.
-        CRITICAL: Follow level criteria. Never repeat yourself. Stay conversational.
-        """
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Topic: {st.session_state.chat_topic}. {kb_mapping}"
-        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
+        mode_instr = f"Level: {st.session_state.user_level}. Mode: {st.session_state.current_mode}. Topic: {st.session_state.chat_topic}."
+        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr} Stay conversational."}]
         hist.extend(st.session_state.messages[-10:])
         if prompt: hist.append({"role": "user", "content": prompt})
         try:
@@ -97,27 +95,11 @@ if api_key:
             return r.json()['choices'][0]['message']['content']
         except: return "*(Buddy smiles)* A quick glitch. Let's try again!"
 
-    # --- SIDEBAR: CONTROL PANEL ---
+    # --- SIDEBAR (Asztali nézethez) ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b><br>Type 'HELP' for tips or 'HINT' if you need a word!</div>", unsafe_allow_html=True)
+        st.markdown("<div style='color:#e67e22; font-weight:bold;'>🆘 HELP / HINT available!</div>", unsafe_allow_html=True)
         st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher"], value=st.session_state.feedback_level or "Balanced")
-        st.markdown("---")
-        if st.session_state.user_level: st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
-        if st.session_state.current_mode: st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
-        if st.session_state.chat_topic: st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
-        
-        # VISSZAKERÜLT A GOMB
-        if st.session_state.chat_topic or st.session_state.current_mode == "Assessment":
-            if st.button("⬅️ Back to Topics Menu"):
-                st.session_state.chat_topic = None
-                st.session_state.messages = []
-                st.rerun()
-        if st.session_state.user_level:
-            if st.button("🔄 Restart Setup"):
-                st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
-                st.session_state.messages = []
-                st.rerun()
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -125,9 +107,11 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        # TELJES WELCOME SZÖVEG
         st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
-        if st.button("Let's start! 🚀"):
+        
+        # START GOMB KÖZÉPRE
+        _, start_col, _ = st.columns([1, 2, 1])
+        if start_col.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
 
@@ -164,6 +148,20 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Start")})
                 st.rerun()
     else:
+        # MOBIL NAVIGÁCIÓ ÉS EMLÉKEZTETŐ
+        st.markdown("<div class='help-hint-bar'>💡 Stuck? Type 'HELP' for tips or 'HINT' for a word!</div>", unsafe_allow_html=True)
+        top_c1, top_c2 = st.columns(2)
+        if top_c1.button("⬅️ Topics"):
+            st.session_state.chat_topic = None
+            st.session_state.messages = []
+            st.rerun()
+        if top_c2.button("🔄 Reset"):
+            st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
+            st.session_state.messages = []
+            st.rerun()
+        
+        st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level} | <b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
+
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -191,5 +189,4 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    # VISSZAKERÜLT A COPYRIGHT
-    st.markdown("<div class='footer-note'><b>SpeakingBuddy</b> is an AI practice partner. LLMs can occasionally produce errors. Consult a teacher for formal evaluation.<br><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer-note'><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)

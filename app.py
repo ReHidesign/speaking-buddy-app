@@ -9,7 +9,7 @@ import re
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: VÉGSŐ JAVÍTÁSOK ---
+# --- CSS: VÉGSŐ DIZÁJN JAVÍTÁS ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,24 +22,27 @@ st.markdown("""
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* Gombok általános stílusa */
+    /* ÖSSZES GOMB KÉKÍTÉSE ÉS STÍLUSA */
     .stButton > button { 
-        border-radius: 8px; 
-        width: 100%;
-        transition: all 0.3s ease;
-    }
-
-    /* A KÉK START GOMB KÉNYSZERÍTÉSE */
-    div.stButton > button[kind="primary"] {
+        border-radius: 8px !important; 
+        width: 100% !important;
         background-color: #3498db !important;
         color: white !important;
         border: none !important;
         font-weight: bold !important;
-        font-size: 1.2em !important;
-        padding: 12px 0 !important;
-        width: 280px !important;
-        margin: 20px auto !important;
-        display: block !important;
+        transition: all 0.3s ease;
+        padding: 10px !important;
+    }
+    
+    .stButton > button:hover {
+        background-color: #2980b9 !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+    }
+
+    /* SPECIÁLIS START GOMB MÉRET */
+    .start-btn > div > button {
+        font-size: 1.3em !important;
+        height: 60px !important;
     }
 
     .status-box { 
@@ -47,6 +50,13 @@ st.markdown("""
         margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.1);
         font-size: 0.9em;
     }
+    
+    .help-card { 
+        padding: 12px; border-radius: 10px; border: 1px dashed #e67e22; 
+        background-color: rgba(230, 126, 34, 0.1); font-size: 13px; margin-bottom: 15px;
+        color: #d35400; font-weight: 500;
+    }
+
     .footer-note { text-align: center; color: grey; font-size: 11px; margin-top: 50px; opacity: 0.8; line-height: 1.5; }
     </style>
     """, unsafe_allow_html=True)
@@ -82,7 +92,7 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         kb_mapping = """
-        Knowledge Base: B1: 'Twenty-three Topics'. B2: '1000 Questions B2', 'Színes B2'. C1/C2: '1000 Questions C1', 'Színes C1'.
+        Knowledge: B1: 'Twenty-three Topics'. B2: '1000 Questions B2', 'Színes B2'. C1/C2: '1000 Questions C1'.
         CRITICAL: Never repeat questions. Track the conversation flow.
         """
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Topic: {st.session_state.chat_topic}. {kb_mapping}"
@@ -94,10 +104,16 @@ if api_key:
             return r.json()['choices'][0]['message']['content']
         except: return "*(Buddy smiles)* A quick glitch. Let's try again!"
 
+    # --- SIDEBAR: CONTROL PANEL ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.session_state.feedback_level = st.select_slider("Feedback:", options=["Relaxed", "Balanced", "Teacher"], value=st.session_state.feedback_level or "Balanced")
+        
+        # FIX HELP KÁRTYA
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b><br>Type 'HELP' for tips or 'HINT' if you need a word!</div>", unsafe_allow_html=True)
+        
+        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher"], value=st.session_state.feedback_level or "Balanced")
         st.markdown("---")
+        
         if st.session_state.user_level: st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
         if st.session_state.current_mode: st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
         
@@ -115,12 +131,19 @@ if api_key:
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
 
+    # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).</div>", unsafe_allow_html=True)
-        if st.button("Let's start! 🚀", type="primary"):
-            st.session_state.intro_done = True
-            st.rerun()
+        
+        # START GOMB KÖZÉPRE IGAZÍTÁSA
+        _, center_col, _ = st.columns([1, 2, 1])
+        with center_col:
+            st.markdown('<div class="start-btn">', unsafe_allow_html=True)
+            if st.button("Let's start! 🚀"):
+                st.session_state.intro_done = True
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     elif not st.session_state.user_level:
         st.subheader("Set your level:")
@@ -153,6 +176,7 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
                 st.rerun()
     else:
+        # Chat interface
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -174,4 +198,11 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    st.markdown("<div class='footer-note'><b>SpeakingBuddy</b> is an AI practice tool. LLMs can occasionally produce errors. Consult a teacher for formal evaluation.<br><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)
+    # PROFI COPYRIGHT
+    st.markdown("""
+        <div class='footer-note'>
+            <b>SpeakingBuddy</b> is an AI practice partner. While advanced, it may occasionally produce 
+            inaccurate information or grammatical nuances. For formal evaluation, please consult a qualified educator.<br>
+            <b>© 2026 SpeakingBuddy by ReHi</b>
+        </div>
+        """, unsafe_allow_html=True)

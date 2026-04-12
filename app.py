@@ -22,7 +22,6 @@ st.markdown("""
     .sub-title { font-style: italic; opacity: 0.8; margin-top: 0px; margin-bottom: 25px; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* ÖSSZES GOMB KÉKÍTÉSE */
     .stButton > button { 
         border-radius: 8px !important; 
         width: 100% !important;
@@ -71,7 +70,8 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    for key in ["messages", "current_mode", "user_level", "chat_topic", "intro_done", "feedback_level"]:
+    # State inicializálás
+    for key in ["messages", "current_mode", "user_level", "chat_topic", "intro_done", "feedback_level", "last_audio_id"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
 
@@ -85,23 +85,19 @@ if api_key:
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        kb_mapping = """
-        Knowledge Base Sources:
-        - B1: 'Twenty-three Topics for Teenagers'
-        - B2: '1000 Questions and Answers B2', 'Színes B2'
-        - C1/C2: '1000 Questions and Answers C1', 'Színes C1'
-        CRITICAL: Never repeat questions. Match exam criteria for the level. Be encouraging but professional.
+        kb_mapping = f"""
+        Knowledge: B1: 'Twenty-three Topics'. B2: '1000 Questions B2', 'Színes B2'. C1/C2: '1000 Questions C1'.
+        CRITICAL: Follow {st.session_state.user_level} level criteria. Never repeat yourself. Keep flow natural.
         """
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Topic: {st.session_state.chat_topic}. {kb_mapping}"
-        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
+        hist = [{"role": "system", "content": f"{system_instruction} {kb_mapping} Mode: {st.session_state.current_mode}. Topic: {st.session_state.chat_topic}"}]
         hist.extend(st.session_state.messages[-10:])
         if prompt: hist.append({"role": "user", "content": prompt})
         try:
-            r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}, timeout=15)
+            r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}, timeout=15)
             return r.json()['choices'][0]['message']['content']
-        except: return "*(Buddy smiles)* A quick glitch. Let's try again!"
+        except: return "*(Buddy smiles)* A quick glitch. What was that again?"
 
-    # --- SIDEBAR: CONTROL PANEL ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.markdown("<div class='help-card'><b>🆘 Stuck?</b><br>Type 'HELP' for tips or 'HINT' if you need a word!</div>", unsafe_allow_html=True)
@@ -111,13 +107,8 @@ if api_key:
         if st.session_state.current_mode: st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
         if st.session_state.chat_topic: st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
         
-        if st.session_state.chat_topic or st.session_state.current_mode == "Assessment":
-            if st.button("⬅️ Back to Topics Menu"):
-                st.session_state.chat_topic = None
-                st.session_state.messages = []
-                st.rerun()
         if st.session_state.user_level:
-            if st.button("🔄 Change Level/Mode"):
+            if st.button("🔄 Restart Setup"):
                 st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
@@ -128,8 +119,7 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
-        
+        st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b>.<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         if st.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
@@ -142,10 +132,11 @@ if api_key:
                 st.session_state.user_level = l
                 st.rerun()
         st.markdown("---")
-        if st.button("🔍 Assess my level"):
+        _, ac, _ = st.columns([1, 2, 1])
+        if ac.button("🔍 Assess my level"):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start level assessment.", "Level Evaluator")})
+            st.session_state.messages.append({"role": "assistant", "content": "Hello! I'm Buddy. To assess your level, let's chat a bit. Tell me, what's your favorite way to spend a weekend?"})
             st.rerun()
 
     elif not st.session_state.current_mode:
@@ -163,30 +154,44 @@ if api_key:
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%2].button(topic):
                 st.session_state.chat_topic = topic
-                st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
+                st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Start Conversation")})
                 st.rerun()
     else:
-        # Chat loop
+        # Chat interface
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-        audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
-        text = st.chat_input("Write to Buddy...")
-        user_msg = text
-        if audio:
-            try:
-                r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": f"Bearer {api_key}"}, files={"file": ("audio.wav", audio['bytes'])}, data={"model": "whisper-large-v3", "language": "en"})
-                user_msg = r.json().get("text", "")
-            except: user_msg = "ERROR"
+        # Input handling
+        audio_in = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
+        text_in = st.chat_input("Write to Buddy...")
+        
+        input_to_process = None
+        
+        # Audio logic with loop-prevention
+        if audio_in:
+            audio_id = hash(audio_in['bytes'])
+            if audio_id != st.session_state.last_audio_id:
+                st.session_state.last_audio_id = audio_id
+                with st.spinner('Buddy is listening...'):
+                    try:
+                        r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", 
+                                         headers={"Authorization": f"Bearer {api_key}"}, 
+                                         files={"file": ("audio.wav", audio_in['bytes'])}, 
+                                         data={"model": "whisper-large-v3", "language": "en"})
+                        input_to_process = r.json().get("text", "")
+                    except: st.error("Audio error. Try typing!")
 
-        if user_msg:
-            st.session_state.messages.append({"role": "user", "content": user_msg})
+        if text_in:
+            input_to_process = text_in
+
+        if input_to_process:
+            st.session_state.messages.append({"role": "user", "content": input_to_process})
             with st.spinner('Thinking...'):
-                ans = call_groq(user_msg, "Partner")
-                st.session_state.messages.append({"role": "assistant", "content": ans})
+                response = call_groq(input_to_process, "Speaking Partner")
+                st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
 
-    st.markdown("<div class='footer-note'><b>SpeakingBuddy</b> is an AI practice partner. LLMs can occasionally produce errors. Consult a teacher for formal evaluation.<br><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer-note'><b>SpeakingBuddy</b> v70 | © 2026 ReHi</div>", unsafe_allow_html=True)

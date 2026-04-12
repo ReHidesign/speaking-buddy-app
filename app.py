@@ -9,12 +9,16 @@ import re
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: VÉGLEGES DESIGN ÉS MOBIL OPTIMALIZÁLÁS ---
+# --- CSS: MOBIL ÉS DESIGN FIXEK ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* Hamburger menü kényszerítése mobilon */
+    .stSidebarNav { visibility: visible !important; }
+    section[data-testid="stSidebar"] { transition: all 0.3s; }
     
     .buddy-header { text-align: center; padding: 20px; }
     .buddy-avatar { font-size: 80px; margin-bottom: 5px; }
@@ -22,7 +26,7 @@ st.markdown("""
     .sub-title { font-style: italic; opacity: 0.8; margin-top: 0px; margin-bottom: 25px; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* GOMBOK DESIGNJA */
+    /* GOMB DESIGN */
     .stButton > button { 
         border-radius: 8px !important; 
         width: 100% !important;
@@ -30,20 +34,7 @@ st.markdown("""
         color: white !important;
         border: none !important;
         font-weight: bold !important;
-        transition: all 0.3s ease;
         padding: 10px !important;
-    }
-    
-    /* START GOMB KÖZÉPRE */
-    .start-container {
-        display: flex;
-        justify-content: center;
-        width: 100%;
-    }
-    div.stButton > button:has(div:contains("🚀")) {
-        max-width: 250px !important;
-        font-size: 1.2em !important;
-        height: 60px !important;
     }
 
     .status-box { 
@@ -53,16 +44,16 @@ st.markdown("""
     }
     
     .help-hint-bar {
-        text-align: center; font-size: 0.8em; color: #e67e22; 
-        font-weight: bold; margin-bottom: 10px; border: 1px dashed #e67e22;
-        border-radius: 5px; padding: 5px;
+        text-align: center; font-size: 0.85em; color: #e67e22; 
+        font-weight: bold; margin-bottom: 15px; border: 1px dashed #e67e22;
+        border-radius: 8px; padding: 10px; background-color: rgba(230, 126, 34, 0.05);
     }
 
     .footer-note { text-align: center; color: grey; font-size: 11px; margin-top: 50px; opacity: 0.8; line-height: 1.5; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIGURÁCIÓ ---
+# --- KONFIG ---
 TOPICS = ["🎲 Surprise Me (Free Chat)", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets", "🌍 Environment & Nature", "🏙️ Lifestyle & Daily Routine", "💼 Jobs & Career", "🎭 Culture & Entertainment", "🏫 Education & Languages", "🛍️ Shopping & Consumer Society", "✈️ Travel & Transport", "⚽ Health & Sport", "💻 Tech & Media", "🍔 Food & Eating Out", "👗 Fashion & Clothes", "🌦️ Weather & Seasons", "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"]
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
@@ -86,8 +77,8 @@ if api_key:
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        mode_instr = f"Level: {st.session_state.user_level}. Mode: {st.session_state.current_mode}. Topic: {st.session_state.chat_topic}."
-        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr} Stay conversational."}]
+        mode_instr = f"Level: {st.session_state.user_level}. Topic: {st.session_state.chat_topic}."
+        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         hist.extend(st.session_state.messages[-10:])
         if prompt: hist.append({"role": "user", "content": prompt})
         try:
@@ -95,10 +86,10 @@ if api_key:
             return r.json()['choices'][0]['message']['content']
         except: return "*(Buddy smiles)* A quick glitch. Let's try again!"
 
-    # --- SIDEBAR (Asztali nézethez) ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.markdown("<div style='color:#e67e22; font-weight:bold;'>🆘 HELP / HINT available!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-hint-bar' style='border:none;'>🆘 HELP: Tips<br>💡 HINT: Words</div>", unsafe_allow_html=True)
         st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher"], value=st.session_state.feedback_level or "Balanced")
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
@@ -109,9 +100,9 @@ if api_key:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         
-        # START GOMB KÖZÉPRE
-        _, start_col, _ = st.columns([1, 2, 1])
-        if start_col.button("Let's start! 🚀"):
+        # START GOMB KÖZÉPRE (Assess gomb mintájára)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        if col2.button("Let's start! 🚀"):
             st.session_state.intro_done = True
             st.rerun()
 
@@ -123,8 +114,8 @@ if api_key:
                 st.session_state.user_level = l
                 st.rerun()
         st.markdown("---")
-        _, ac, _ = st.columns([1, 2, 1])
-        if ac.button("🔍 Assess my level"):
+        c1, c2, c3 = st.columns([1, 2, 1])
+        if c2.button("🔍 Assess my level"):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
             st.session_state.messages.append({"role": "assistant", "content": "Hello! I'm Buddy. To assess your level, let's chat. Tell me, what's your favorite way to spend a weekend?"})
@@ -148,14 +139,14 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Start")})
                 st.rerun()
     else:
-        # MOBIL NAVIGÁCIÓ ÉS EMLÉKEZTETŐ
+        # HELP BAR + NAVIGÁCIÓ
         st.markdown("<div class='help-hint-bar'>💡 Stuck? Type 'HELP' for tips or 'HINT' for a word!</div>", unsafe_allow_html=True)
-        top_c1, top_c2 = st.columns(2)
-        if top_c1.button("⬅️ Topics"):
+        t1, t2 = st.columns(2)
+        if t1.button("⬅️ Topics"):
             st.session_state.chat_topic = None
             st.session_state.messages = []
             st.rerun()
-        if top_c2.button("🔄 Reset"):
+        if t2.button("🔄 Reset"):
             st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
             st.session_state.messages = []
             st.rerun()
@@ -189,4 +180,4 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    st.markdown("<div class='footer-note'><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)
+    st.markdown("<div class='footer-note'><b>SpeakingBuddy</b> is an AI practice partner.<br><b>© 2026 SpeakingBuddy by ReHi</b></div>", unsafe_allow_html=True)

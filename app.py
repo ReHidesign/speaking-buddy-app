@@ -11,7 +11,7 @@ import hashlib
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: DARK MODE, ELEGÁNS GOMB ÉS DESIGN ---
+# --- CSS: DARK MODE ÉS DESIGN ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -24,12 +24,7 @@ st.markdown("""
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* A Let's Start gomb egyedi, nem piros, kék stílusa */
-    div.stButton > button:first-child {
-        border-radius: 8px;
-    }
-    
-    /* Kifejezetten a kezdő gomb színe */
+    .stButton > button { border-radius: 8px; }
     .stButton > button[kind="secondary"] {
         background-color: #3498db !important;
         color: white !important;
@@ -37,26 +32,18 @@ st.markdown("""
     }
 
     .status-box { 
-        padding: 10px; 
-        border-radius: 10px; 
-        border-left: 5px solid #3498db; 
-        margin-bottom: 10px; 
-        background-color: rgba(120, 120, 120, 0.1);
+        padding: 10px; border-radius: 10px; border-left: 5px solid #3498db; 
+        margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.1);
     }
     .help-card { 
-        padding: 12px; 
-        border-radius: 10px; 
-        border: 1px dashed #e67e22; 
-        background-color: rgba(230, 126, 34, 0.1);
-        font-size: 13px; 
-        margin-bottom: 15px;
+        padding: 12px; border-radius: 10px; border: 1px dashed #e67e22; 
+        background-color: rgba(230, 126, 34, 0.1); font-size: 13px; margin-bottom: 15px;
     }
-    
     .footer-note { text-align: center; color: grey; font-size: 10px; margin-top: 30px; opacity: 0.7; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIGURÁCIÓ: BŐVÍTETT KÖNYV-TÉMÁK ---
+# --- KONFIGURÁCIÓ: DINAMIKUS TÉMÁK ---
 TOPICS = [
     "🎲 Surprise Me (Free Chat)", 
     "🏠 Family & Friends", 
@@ -67,13 +54,15 @@ TOPICS = [
     "💼 Jobs & Career", 
     "🎭 Culture & Entertainment", 
     "🏫 Education & Languages", 
-    "🛍️ Consumer Society", 
+    "🛍️ Shopping & Consumer Society", 
     "✈️ Travel & Transport", 
     "⚽ Health & Sport", 
     "💻 Tech & Media",
     "🍔 Food & Eating Out", 
     "👗 Fashion & Clothes",
-    "🌦️ Weather & Seasons"
+    "🌦️ Weather & Seasons",
+    "🇭🇺 Hungary & the EU",
+    "🏛️ General Culture & Civilization"
 ]
 
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
@@ -101,14 +90,33 @@ if api_key:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
         lv = st.session_state.user_level
-        kb = ""
-        if "B1" in str(lv): kb = "Source: 'Twenty-three Topics for Teenagers'. Use its B1 level vocab."
-        elif "B2" in str(lv): kb = "Sources: '1000 Questions B2', 'Színes B2', 'Bajnóczi B2'. Intermediate exam focus."
-        elif "C1" in str(lv) or "C2" in str(lv): kb = "Sources: '1000 Questions C1', 'Színes C1'. Advanced academic vocab."
+        topic = st.session_state.chat_topic
         
-        topic_info = f"Topic: {st.session_state.chat_topic}."
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. {topic_info} {kb}"
+        # BELSŐ TUDÁSBÁZIS TÉRKÉP (A Te kérésed alapján)
+        kb_mapping = """
+        If Level is B1: Use 'Twenty-three Topics for Teenagers'. 
+        - Family & Friends: Chapters 1, 2, 4.
+        - Home: Chapter 3.
+        - Environment: Chapter 22.
+        - Animals: Chapter 20.
+        - Lifestyle: Chapter 6.
+        - Jobs: Chapter 17.
+        - Culture: Chapters 7, 8, 9.
+        - Education: Chapter 5.
+        - Travel: Chapters 18, 19.
+        - Health: Chapters 10, 11.
+        - Tech: Chapters 15, 16.
+        - Food: Chapter 12.
+        - Fashion: Chapter 14.
+        - Weather: Chapter 21.
+        - Shopping: Chapter 13.
+        - Hungary & EU: Chapter 23.
+        If Level is B2: Use '1000 Questions B2', 'Színes B2', and 'Bajnóczi B2'.
+        If Level is C1/C2: Use '1000 Questions C1' and 'Színes C1'.
+        If Topic is 'General Culture & Civilization': Act as a knowledgeable tutor. Answer student questions about UK/USA history, customs, or geography if they are stuck.
+        """
         
+        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. Topic: {topic}. {kb_mapping}"
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
@@ -117,7 +125,7 @@ if api_key:
             r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}), timeout=20)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy smiles)* A quick lag there! What was that last part?"
+            return "*(Buddy smiles)* A little connection glitch. Could you say that again?"
 
     # --- SIDEBAR ---
     with st.sidebar:
@@ -136,7 +144,7 @@ if api_key:
                 st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for grammar tips!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for tips!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -144,9 +152,7 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        # VISSZATÉRT A TELJES SZÖVEG
-        st.markdown("<div class='welcome-text'>I am here to help you practise <b>English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
-        
+        st.markdown("<div class='welcome-text'>I am here to help you <b>practise</b> English speaking and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns([1.5, 2, 1.5])
         if c2.button("Let's start! 🚀", use_container_width=True):
             st.session_state.intro_done = True
@@ -159,7 +165,6 @@ if api_key:
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
-        # VISSZATÉRT AZ ASSESSMENT GOMB
         if st.button("🔍 Assess my level", use_container_width=True):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
@@ -187,9 +192,9 @@ if api_key:
                 st.rerun()
 
     else:
-        # Chat felület (képpel, ha Picture mód van)
-        if st.session_state.current_mode == "Picture" and st.session_state.chat_topic:
-            st.image(f"https://image.pollinations.ai/prompt/exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}")
+        # Kép generálás Picture módhoz
+        if st.session_state.current_mode == "Picture" and st.session_state.chat_topic and not st.session_state.messages[0].get("image_shown"):
+             st.image(f"https://image.pollinations.ai/prompt/exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}")
 
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):

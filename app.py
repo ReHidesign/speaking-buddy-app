@@ -6,12 +6,11 @@ import io
 from streamlit_mic_recorder import mic_recorder
 import re
 import random
-import hashlib
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: DARK MODE ÉS DESIGN ---
+# --- CSS: DARK MODE, GOMBOK ÉS MOBIL FIX ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,9 +21,12 @@ st.markdown("""
     .buddy-avatar { font-size: 80px; margin-bottom: 5px; }
     .main-title { font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
-    .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    .stButton > button { border-radius: 8px; }
+    /* Welcome szöveg formázása HTML-lel a csillagok helyett */
+    .welcome-box { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .highlight { font-weight: bold; color: #3498db; }
+
+    .stButton > button { border-radius: 8px; width: 100%; }
     .stButton > button[kind="secondary"] {
         background-color: #3498db !important;
         color: white !important;
@@ -36,15 +38,11 @@ st.markdown("""
         margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.1);
         font-size: 0.9em;
     }
-    .help-card { 
-        padding: 12px; border-radius: 10px; border: 1px dashed #e67e22; 
-        background-color: rgba(230, 126, 34, 0.1); font-size: 13px; margin-bottom: 15px;
-    }
     .footer-note { text-align: center; color: grey; font-size: 10px; margin-top: 30px; opacity: 0.7; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIGURÁCIÓ ---
+# --- CONFIG ---
 TOPICS = [
     "🎲 Surprise Me (Free Chat)", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets",
     "🌍 Environment & Nature", "🏙️ Lifestyle & Daily Routine", "💼 Jobs & Career", "🎭 Culture & Entertainment", 
@@ -53,7 +51,8 @@ TOPICS = [
     "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"
 ]
 
-LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
+# Sorrend fixálása a gombokhoz (A1, A2, B1, B2...)
+LEVEL_ORDER = ["A1 (Beginner)", "A2 (Pre-Int)", "B1 (Intermediate)", "B2 (Upper-Int)", "C1 (Advanced)", "C2 (Proficiency)"]
 
 if "GROQ_API_KEY" in st.secrets:
     api_key = st.secrets["GROQ_API_KEY"]
@@ -61,7 +60,7 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    for key in ["messages", "current_mode", "user_level", "chat_topic", "last_image_url", "intro_done", "feedback_level", "last_audio_id"]:
+    for key in ["messages", "current_mode", "user_level", "chat_topic", "intro_done", "feedback_level"]:
         if key not in st.session_state: st.session_state[key] = None
     if st.session_state.messages is None: st.session_state.messages = []
 
@@ -81,9 +80,10 @@ if api_key:
         
         kb_mapping = f"""
         If Level is B1: Use 'Twenty-three Topics for Teenagers'. (Topics: Family Ch1,2,4; Home Ch3; Env Ch22; Animals Ch20; Lifestyle Ch6; Jobs Ch17; Culture Ch7,8,9; Education Ch5; Travel Ch18,19; Health Ch10,11; Tech Ch15,16; Food Ch12; Fashion Ch14; Weather Ch21; Shopping Ch13; Hungary Ch23).
-        If Level is B2: Use '1000 Questions B2', 'Színes B2', and 'Bajnóczi B2'.
-        If Level is C1/C2: Use '1000 Questions C1' and 'Színes C1'.
-        If Topic is '🏛️ General Culture & Civilization': Act as a tutor for UK/USA/Global culture. Answer any student questions or introduce interesting facts if they are just starting.
+        If Level is B2: Use '1000 Questions B2', 'Színes B2', 'Bajnóczi B2'.
+        If Level is C1/C2: Use '1000 Questions C1', 'Színes C1'.
+        If Topic is '🏛️ General Culture & Civilization': Act as a tutor.
+        Important: DO NOT REPEAT the same questions if the student returns to this topic. Try to cover different aspects of the chapters.
         """
         
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. Topic: {topic}. {kb_mapping}"
@@ -95,9 +95,9 @@ if api_key:
             r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}), timeout=20)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy smiles)* A quick hiccup in the connection! Can you say that again?"
+            return "*(Buddy smiles)* A quick lag. What was that?"
 
-    # --- SIDEBAR: CONTROL PANEL ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level or "Balanced")
@@ -109,33 +109,32 @@ if api_key:
         if st.session_state.chat_topic:
             st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
         
-        st.write("")
-        if st.session_state.user_level:
-            if st.button("🔄 Change Level/Mode"):
-                st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
-                st.session_state.messages = []
-                st.rerun()
-
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for tips!</div>", unsafe_allow_html=True)
-        if st.button("🗑️ Full Reset"):
-            for k in list(st.session_state.keys()): del st.session_state[k]
+        if st.session_state.user_level and st.button("🔄 Reset to Menu"):
+            st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
+            st.session_state.messages = []
             st.rerun()
 
-    # --- MAIN FLOW ---
+    # --- MAIN ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        # JAVÍTOTT KIEMELÉSEK
-        st.markdown("<div class='welcome-text'>I am here to help you **practise English speaking** and focus on **real-life communication** (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1.5, 2, 1.5])
-        if c2.button("Let's start! 🚀", use_container_width=True):
+        # FIX: Tiszta HTML a vastagításhoz, nincs több csillag hiba
+        st.markdown("""
+            <div class='welcome-box'>
+            I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>
+            Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!
+            </div>
+            """, unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([1, 2, 1])
+        if c2.button("Let's start! 🚀", use_container_width=True, kind="secondary"):
             st.session_state.intro_done = True
             st.rerun()
 
     elif not st.session_state.user_level:
         st.subheader("Set your level:")
+        # FIX: Gombok sorrendje mobilon (A1, A2 egymás mellett)
         cols = st.columns(2)
-        for i, l in enumerate(LEVELS.keys()):
-            if cols[i%2].button(l, use_container_width=True):
+        for idx, l in enumerate(LEVEL_ORDER):
+            if cols[idx % 2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
         if st.button("🔍 Assess my level", use_container_width=True):
@@ -165,7 +164,7 @@ if api_key:
                 st.rerun()
 
     else:
-        # Chat felület
+        # Chat felület... (maradt a régi jól működő rész)
         if st.session_state.current_mode == "Picture" and st.session_state.chat_topic:
              if not any("http" in str(m.get("content")) for m in st.session_state.messages):
                  st.image(f"https://image.pollinations.ai/prompt/exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}")

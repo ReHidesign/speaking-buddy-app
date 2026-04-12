@@ -5,12 +5,11 @@ from gtts import gTTS
 import io
 from streamlit_mic_recorder import mic_recorder
 import re
-import random
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: FIXÁLT DESIGN ÉS KÉK GOMB ---
+# --- CSS: TELJES DESIGN ÉS GOMB KONTROLL ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -23,23 +22,24 @@ st.markdown("""
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* Általános gomb stílus */
+    /* Gombok általános stílusa */
     .stButton > button { 
         border-radius: 8px; 
+        width: 100%;
         transition: all 0.3s ease;
     }
 
-    /* SPECIÁLIS KÉK GOMB KÖZÉPRE IGAZÍTVA */
+    /* A KÉK START GOMB FIXÁLÁSA */
     div.stButton > button:contains("🚀") {
         background-color: #3498db !important;
         color: white !important;
         border: none !important;
         font-weight: bold !important;
         font-size: 1.2em !important;
-        padding: 10px 40px !important;
+        padding: 12px 0 !important;
         width: 280px !important;
-        display: block;
         margin: 20px auto !important;
+        display: block;
     }
 
     .status-box { 
@@ -47,11 +47,7 @@ st.markdown("""
         margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.1);
         font-size: 0.9em;
     }
-    .help-card { 
-        padding: 12px; border-radius: 10px; border: 1px dashed #e67e22; 
-        background-color: rgba(230, 126, 34, 0.1); font-size: 13px; margin-bottom: 15px;
-    }
-    .footer-note { text-align: center; color: grey; font-size: 11px; margin-top: 50px; opacity: 0.8; line-height: 1.4; }
+    .footer-note { text-align: center; color: grey; font-size: 11px; margin-top: 50px; opacity: 0.8; line-height: 1.5; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,7 +59,6 @@ TOPICS = [
     "💻 Tech & Media", "🍔 Food & Eating Out", "👗 Fashion & Clothes", "🌦️ Weather & Seasons",
     "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"
 ]
-
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
 if "GROQ_API_KEY" in st.secrets:
@@ -89,35 +84,27 @@ if api_key:
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         lv = st.session_state.user_level or "B1"
         topic = st.session_state.chat_topic or "General"
-        
-        kb_mapping = f"""
-        Knowledge Base: B1: 'Twenty-three Topics'. B2: '1000 Questions B2'. C1/C2: '1000 Questions C1'.
-        Topic 'Civilization': Focus on history, geography and culture.
-        CRITICAL: Never repeat questions. Keep track of what has been discussed.
-        """
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. Topic: {topic}. {kb_mapping}"
+        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. Topic: {topic}."
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         hist.extend(st.session_state.messages[-6:])
         if prompt: hist.append({"role": "user", "content": prompt})
-        
         try:
-            r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}, timeout=20)
+            r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}, timeout=15)
             return r.json()['choices'][0]['message']['content']
-        except: return "*(Buddy smiles)* A minor connection glitch! Let's try again."
+        except: return "*(Buddy smiles)* A quick glitch! Let's try again."
 
     # --- SIDEBAR: CONTROL PANEL ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level or "Balanced")
+        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher"], value=st.session_state.feedback_level or "Balanced")
         st.markdown("---")
         
         if st.session_state.user_level:
             st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
         if st.session_state.current_mode:
             st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
-        if st.session_state.chat_topic:
-            st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
         
+        # VISSZA A MENÜBE - Mindig elérhető a beszélgetés alatt
         if st.session_state.chat_topic or st.session_state.current_mode == "Assessment":
             if st.button("⬅️ Back to Topics Menu"):
                 st.session_state.chat_topic = None
@@ -125,12 +112,11 @@ if api_key:
                 st.rerun()
 
         if st.session_state.user_level:
-            if st.button("🔄 Change Level/Mode"):
+            if st.button("🔄 Restart Level/Mode"):
                 st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
 
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for tips!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -138,7 +124,7 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b>.<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         
         if st.button("Let's start! 🚀"):
             st.session_state.intro_done = True
@@ -154,7 +140,7 @@ if api_key:
         if st.button("🔍 Assess my level"):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start assessment.", "Level Evaluator")})
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Level Evaluator")})
             st.rerun()
 
     elif not st.session_state.current_mode:
@@ -176,22 +162,22 @@ if api_key:
                 st.rerun()
 
     else:
-        # Chat felület
+        # Chat interface
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-        audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
-        text = st.chat_input("Write to Buddy...")
+        audio_data = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
+        text_input = st.chat_input("Write to Buddy...")
         
-        user_msg = text
-        if audio:
+        user_msg = text_input
+        if audio_data:
             try:
-                r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": f"Bearer {api_key}"}, files={"file": ("audio.wav", audio['bytes'])}, data={"model": "whisper-large-v3", "language": "en"})
+                r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": f"Bearer {api_key}"}, files={"file": ("audio.wav", audio_data['bytes'])}, data={"model": "whisper-large-v3", "language": "en"})
                 user_msg = r.json().get("text", "")
-            except: user_msg = "ERROR"
+            except: user_msg = "AUDIO_ERROR"
 
         if user_msg:
             st.session_state.messages.append({"role": "user", "content": user_msg})
@@ -200,12 +186,12 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": ans})
             st.rerun()
 
-    # --- COPYRIGHT & AI DISCLAIMER ---
+    # --- PROFI COPYRIGHT ---
     st.markdown("""
         <div class='footer-note'>
-            Please note: SpeakingBuddy is an AI powered by Large Language Models. 
-            While it is a great practice partner, it may occasionally provide inaccurate information 
-            or incorrect grammar. Always consult a human teacher for professional evaluation.<br>
+            <b>SpeakingBuddy</b> is an AI practice partner. While it uses advanced language models, 
+            it may occasionally produce inaccurate information or grammatical nuances. 
+            For formal evaluation, please consult a qualified educator.<br>
             <b>© 2026 SpeakingBuddy by ReHi</b>
         </div>
         """, unsafe_allow_html=True)

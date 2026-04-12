@@ -10,7 +10,7 @@ import random
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: DESIGN, DARK MODE ÉS MOBIL FIX ---
+# --- CSS: DESIGN ÉS MOBIL FIX ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -22,10 +22,9 @@ st.markdown("""
     .main-title { font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
     
-    /* Welcome szöveg tiszta HTML formázással */
     .welcome-box { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    .stButton > button { border-radius: 8px; width: 100%; }
+    .stButton > button { border-radius: 8px; width: 100%; margin-bottom: 5px; }
     .stButton > button[kind="secondary"] {
         background-color: #3498db !important;
         color: white !important;
@@ -42,29 +41,33 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- KONFIGURÁCIÓ ---
-TOPICS = [
-    "🎲 Surprise Me (Free Chat)", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets",
-    "🌍 Environment & Nature", "🏙️ Lifestyle & Daily Routine", "💼 Jobs & Career", "🎭 Culture & Entertainment", 
-    "🏫 Education & Languages", "🛍️ Shopping & Consumer Society", "✈️ Travel & Transport", "⚽ Health & Sport", 
-    "💻 Tech & Media", "🍔 Food & Eating Out", "👗 Fashion & Clothes", "🌦️ Weather & Seasons",
-    "🇭🇺 Hungary & the EU", "🏛️ General Culture & Civilization"
-]
-
-# Logikus sorrend a gombokhoz (A1, A2, B1, B2...)
 LEVEL_ORDER = ["A1 (Beginner)", "A2 (Pre-Int)", "B1 (Intermediate)", "B2 (Upper-Int)", "C1 (Advanced)", "C2 (Proficiency)"]
+TOPICS = [
+    "🎲 Surprise Me", "🏠 Family & Friends", "🏘️ Home & Housing", "🐾 Animals & Pets",
+    "🌍 Environment", "🏙️ Lifestyle", "💼 Jobs & Career", "🎭 Culture", 
+    "🏫 Education", "🛍️ Shopping", "✈️ Travel", "⚽ Health & Sport", 
+    "💻 Tech & Media", "🍔 Food", "👗 Fashion", "🌦️ Weather",
+    "🇭🇺 Hungary & EU", "🏛️ Civilization"
+]
 
 if "GROQ_API_KEY" in st.secrets:
     api_key = st.secrets["GROQ_API_KEY"]
 else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
-# --- MUNKAMENET INICIALIZÁLÁSA ---
-for key in ["messages", "current_mode", "user_level", "chat_topic", "intro_done", "feedback_level"]:
-    if key not in st.session_state:
-        st.session_state[key] = None
+# --- ÁLLAPOT KEZELÉS (Session State) ---
+state_keys = {
+    "messages": [],
+    "current_mode": None,
+    "user_level": None,
+    "chat_topic": None,
+    "intro_done": False,
+    "feedback_level": "Balanced"
+}
 
-if st.session_state.messages is None:
-    st.session_state.messages = []
+for key, default in state_keys.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 if api_key:
     def speak_text(text):
@@ -78,20 +81,20 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
-        lv = st.session_state.user_level or "B1"
+        mode = st.session_state.current_mode or "Conversation"
+        level = st.session_state.user_level or "B1"
         topic = st.session_state.chat_topic or "General"
         
-        kb_mapping = f"""
-        Knowledge Base Instructions:
-        Level B1: 'Twenty-three Topics for Teenagers' (Family: Ch1,2,4; Home: Ch3; Env: Ch22; Animals: Ch20; Lifestyle: Ch6; Jobs: Ch17; Culture: Ch7,8,9; Education: Ch5; Travel: Ch18,19; Health: Ch10,11; Tech: Ch15,16; Food: Ch12; Fashion: Ch14; Weather: Ch21; Shopping: Ch13; Hungary: Ch23).
+        kb_text = f"""
+        Strictly use these as knowledge base:
+        Level B1: 'Twenty-three Topics for Teenagers'.
         Level B2: '1000 Questions B2', 'Színes B2', 'Bajnóczi B2'.
         Level C1/C2: '1000 Questions C1', 'Színes C1'.
-        Topic '🏛️ General Culture & Civilization': Focus on UK/US customs, history, and interesting facts.
-        Important: Be creative. If a student returns to the same topic, ask different questions from the chapters to cover the whole book eventually.
+        Topic '🏛️ Civilization': Act as a tutor for British/American culture.
+        Always vary your questions. If the student returns, do not ask the same thing.
         """
         
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. Topic: {topic}. {kb_mapping}"
-        hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
+        hist = [{"role": "system", "content": f"{system_instruction} Mode: {mode}. Level: {level}. Topic: {topic}. {kb_text}"}]
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         
@@ -99,15 +102,14 @@ if api_key:
             r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}, timeout=20)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy smiles)* I had a tiny glitch. Could you say that again?"
+            return "*(Buddy smiles)* I had a tiny glitch. What was that again?"
 
     # --- SIDEBAR: CONTROL PANEL ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
-        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level if st.session_state.feedback_level else "Balanced")
+        st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
         
-        # Ez a rész felelős azért, hogy a panel ne ürüljön ki
         if st.session_state.user_level:
             st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
         if st.session_state.current_mode:
@@ -115,17 +117,12 @@ if api_key:
         if st.session_state.chat_topic:
             st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
         
-        st.write("")
-        if st.session_state.user_level and st.button("🔄 Change Level/Mode"):
+        if st.session_state.user_level and st.button("🔄 Reset / New Topic"):
             st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
             st.session_state.messages = []
             st.rerun()
 
-        if st.button("🗑️ Full Reset"):
-            for k in list(st.session_state.keys()): del st.session_state[k]
-            st.rerun()
-
-    # --- MAIN UI ---
+    # --- MAIN UI FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.markdown("""
@@ -134,51 +131,54 @@ if api_key:
             Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!
             </div>
             """, unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 2, 1])
-        if c2.button("Let's start! 🚀", kind="secondary"):
+        if st.button("Let's start! 🚀", kind="secondary"):
             st.session_state.intro_done = True
             st.rerun()
 
     elif not st.session_state.user_level:
         st.subheader("Set your level:")
-        # Fix sorrend mobilon: A1-A2, B1-B2...
-        cols = st.columns(2)
-        for idx, l in enumerate(LEVEL_ORDER):
-            if cols[idx % 2].button(l, key=f"btn_lvl_{idx}"):
-                st.session_state.user_level = l
-                st.rerun()
-        if st.button("🔍 Assess my level", use_container_width=True):
+        # A1-A2, B1-B2 sorrend fixálása
+        for i in range(0, len(LEVEL_ORDER), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                if i + j < len(LEVEL_ORDER):
+                    lvl = LEVEL_ORDER[i+j]
+                    if cols[j].button(lvl, key=f"L_{lvl}"):
+                        st.session_state.user_level = lvl
+                        st.rerun()
+        if st.button("🔍 Assess my level"):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start assessment.", "Level Evaluator")})
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start assessment.", "Evaluator")})
             st.rerun()
 
     elif not st.session_state.current_mode:
         st.subheader("Choose mode:")
-        m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat", "🗣️ Slang & Idioms"]
-        cols = st.columns(2)
-        for i, m in enumerate(m_list):
-            if cols[i%2].button(m, key=f"btn_mode_{i}"):
-                st.session_state.current_mode = m.split()[-1]
-                st.rerun()
+        m_list = ["📈 Debate", "🎭 Situation", "🖼️ Picture", "💬 Chat", "🗣️ Slang"]
+        for i in range(0, len(m_list), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                if i + j < len(m_list):
+                    m = m_list[i+j]
+                    if cols[j].button(m, key=f"M_{m}"):
+                        st.session_state.current_mode = m
+                        st.rerun()
 
-    elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
+    elif not st.session_state.chat_topic:
         st.subheader("Select topic:")
-        t_cols = st.columns(2)
-        for idx, topic in enumerate(TOPICS):
-            if t_cols[idx%2].button(topic, key=f"btn_top_{idx}"):
-                st.session_state.chat_topic = topic
-                with st.spinner('Buddy is preparing...'):
-                    ans = call_groq("Hello! Let's start the session.", "Partner")
-                    st.session_state.messages.append({"role": "assistant", "content": ans})
-                st.rerun()
+        for i in range(0, len(TOPICS), 2):
+            cols = st.columns(2)
+            for j in range(2):
+                if i + j < len(TOPICS):
+                    t = TOPICS[i+j]
+                    if cols[j].button(t, key=f"T_{t}"):
+                        st.session_state.chat_topic = t
+                        with st.spinner('Buddy is getting ready...'):
+                            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start.", "Partner")})
+                        st.rerun()
 
     else:
-        # Chat Interface
-        if st.session_state.current_mode == "Picture" and st.session_state.chat_topic:
-             if not any("http" in str(m.get("content")) for m in st.session_state.messages):
-                 st.image(f"https://image.pollinations.ai/prompt/exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}")
-
+        # Chat interface
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])

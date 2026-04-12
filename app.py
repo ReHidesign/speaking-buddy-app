@@ -8,31 +8,48 @@ import re
 import random
 import hashlib
 
-# --- PAGE CONFIG (Ez segít a mobil elnevezésben) ---
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: MENÜ ELREJTÉSE ÉS DESIGN ---
+# --- CSS: DARK MODE BARÁT ÉS MENÜ ELREJTÉSE ---
 st.markdown("""
     <style>
-    /* A Streamlit menü és a kód megtekintésének elrejtése */
+    /* Menü és felesleges elemek elrejtése a kód védelmében */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     
-    .stApp { background-color: #f8f9fa; }
+    /* Dark mode barát színek és elrendezés */
     .buddy-header { text-align: center; padding: 20px; }
     .buddy-avatar { font-size: 100px; margin-bottom: 10px; }
-    .main-title { color: #1e3a5a; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
-    .sub-title { color: #666; font-style: italic; margin-top: 0px; margin-bottom: 30px; }
+    .main-title { font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
+    .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 30px; opacity: 0.8; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
-    .status-box { background-color: #ffffff; padding: 12px; border-radius: 12px; border-left: 5px solid #3498db; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); color: #2e4053; }
-    .help-card { background-color: #fff4e5; padding: 15px; border-radius: 10px; border: 1px dashed #e67e22; color: #d35400; font-size: 13px; margin-top: 10px; }
+    
+    /* Kártyák, amik alkalmazkodnak a háttérhez */
+    .status-box { 
+        padding: 12px; 
+        border-radius: 12px; 
+        border-left: 5px solid #3498db; 
+        margin-bottom: 10px; 
+        background-color: rgba(120, 120, 120, 0.1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .help-card { 
+        padding: 15px; 
+        border-radius: 10px; 
+        border: 1px dashed #e67e22; 
+        background-color: rgba(230, 126, 34, 0.1);
+        font-size: 13px; 
+        margin-top: 10px; 
+    }
     div.stButton > button { display: block; margin: 0 auto; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- KONFIGURÁCIÓ ---
-TOPICS = ["🌍 Environment", "🏙️ Lifestyle", "💼 Career", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Technology"]
+# Hozzáadva a Surprise Me gomb
+TOPICS = ["🌍 Environment", "🏙️ Lifestyle", "💼 Career", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Technology", "🎲 Surprise Me (Free Chat)"]
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
 if "GROQ_API_KEY" in st.secrets:
@@ -67,13 +84,22 @@ if api_key:
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}."
+        
+        # Surprise Me speciális kezelése
+        actual_topic = st.session_state.chat_topic
+        if actual_topic == "Surprise":
+            topic_context = "The user wants a FREE CHAT. Do not ask what to talk about. Instead, pick a random interesting topic yourself and start with an engaging question!"
+        else:
+            topic_context = f"The topic is {actual_topic}."
+
+        mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. {topic_context}"
+        
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         
         try:
-            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.7}), timeout=20)
+            r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}), timeout=20)
             return r.json()['choices'][0]['message']['content']
         except:
             return "*(Buddy smiles)* I'm having a little lag. Could you please repeat your last message?"
@@ -95,7 +121,7 @@ if api_key:
                 st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for grammar tips!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for tips!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -138,7 +164,11 @@ if api_key:
                 st.session_state.chat_topic = topic.split()[-1]
                 if st.session_state.current_mode == "Picture":
                     st.session_state.last_image_url = f"https://image.pollinations.ai/prompt/realistic_exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}"
-                st.session_state.messages.append({"role": "assistant", "content": call_groq(f"Start {st.session_state.current_mode}.", "Partner")})
+                
+                # Azonnali kezdés a témában, kikerülve a "miről beszéljünk" kérdést
+                with st.spinner('Buddy is getting ready...'):
+                    ans = call_groq(f"Let's start our {st.session_state.current_mode} practice now.", "Language Partner")
+                    st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
     else:

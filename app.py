@@ -22,19 +22,20 @@ st.markdown("""
     .buddy-avatar { font-size: 80px; margin-bottom: 5px; }
     .main-title { font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
     .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
-    .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 20px; max-width: 600px; margin-left: auto; margin-right: auto; }
+    .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
-    /* Let's Start gomb egyedi stílusa (Nem piros, nem túl széles) */
-    div.stButton > button:first-child[data-testid="baseButton-secondary"] {
-        background-color: #3498db;
-        color: white;
-        border: none;
-        padding: 10px 30px;
-        font-size: 18px;
-        font-weight: bold;
-        transition: 0.3s;
+    /* A Let's Start gomb egyedi, nem piros, kék stílusa */
+    div.stButton > button:first-child {
+        border-radius: 8px;
     }
     
+    /* Kifejezetten a kezdő gomb színe */
+    .stButton > button[kind="secondary"] {
+        background-color: #3498db !important;
+        color: white !important;
+        border: none !important;
+    }
+
     .status-box { 
         padding: 10px; 
         border-radius: 10px; 
@@ -55,8 +56,26 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- KONFIGURÁCIÓ ---
-TOPICS = ["🎲 Surprise Me (Free Chat)", "🏠 Family", "🌍 Environment", "🏙️ Lifestyle", "💼 Work", "🎭 Culture", "🏫 Education", "🛍️ Consumer Society", "✈️ Travel", "⚽ Health", "💻 Tech", "🍔 Food", "👗 Fashion"]
+# --- KONFIGURÁCIÓ: BŐVÍTETT KÖNYV-TÉMÁK ---
+TOPICS = [
+    "🎲 Surprise Me (Free Chat)", 
+    "🏠 Family & Friends", 
+    "🏘️ Home & Housing",
+    "🐾 Animals & Pets",
+    "🌍 Environment & Nature", 
+    "🏙️ Lifestyle & Daily Routine", 
+    "💼 Jobs & Career", 
+    "🎭 Culture & Entertainment", 
+    "🏫 Education & Languages", 
+    "🛍️ Consumer Society", 
+    "✈️ Travel & Transport", 
+    "⚽ Health & Sport", 
+    "💻 Tech & Media",
+    "🍔 Food & Eating Out", 
+    "👗 Fashion & Clothes",
+    "🌦️ Weather & Seasons"
+]
+
 LEVELS = {"A1 (Beginner)": "A1", "A2 (Pre-Int)": "A2", "B1 (Intermediate)": "B1", "B2 (Upper-Int)": "B2", "C1 (Advanced)": "C1", "C2 (Proficiency)": "C2"}
 
 if "GROQ_API_KEY" in st.secrets:
@@ -81,12 +100,11 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         
-        # A KÖNYV-LOGIKA BEÉPÍTÉSE
         lv = st.session_state.user_level
         kb = ""
-        if "B1" in str(lv): kb = "Primary resource: 'Twenty-three Topics for Teenagers'. Use its vocab and question style."
-        elif "B2" in str(lv): kb = "Primary resources: '1000 Questions B2' and 'Színes kérdések és válaszok B2'. High-school exam level."
-        elif "C1" in lv or "C2" in str(lv): kb = "Primary resources: '1000 Questions C1' and 'Színes kérdések C1'. Expect sophisticated vocab."
+        if "B1" in str(lv): kb = "Source: 'Twenty-three Topics for Teenagers'. Use its B1 level vocab."
+        elif "B2" in str(lv): kb = "Sources: '1000 Questions B2', 'Színes B2', 'Bajnóczi B2'. Intermediate exam focus."
+        elif "C1" in str(lv) or "C2" in str(lv): kb = "Sources: '1000 Questions C1', 'Színes C1'. Advanced academic vocab."
         
         topic_info = f"Topic: {st.session_state.chat_topic}."
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {lv}. {topic_info} {kb}"
@@ -99,7 +117,7 @@ if api_key:
             r = requests.post(url, headers=headers, data=json.dumps({"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}), timeout=20)
             return r.json()['choices'][0]['message']['content']
         except:
-            return "*(Buddy smiles)* My connection dropped. Can you repeat that?"
+            return "*(Buddy smiles)* A quick lag there! What was that last part?"
 
     # --- SIDEBAR ---
     with st.sidebar:
@@ -118,7 +136,7 @@ if api_key:
                 st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
-        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for tips!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='help-card'><b>🆘 Stuck?</b> Type 'HELP' for grammar tips!</div>", unsafe_allow_html=True)
         if st.button("🗑️ Full Reset"):
             for k in list(st.session_state.keys()): del st.session_state[k]
             st.rerun()
@@ -126,9 +144,9 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b>.<br>Let's get started!</div>", unsafe_allow_html=True)
+        # VISSZATÉRT A TELJES SZÖVEG
+        st.markdown("<div class='welcome-text'>I am here to help you practice <b>English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         
-        # Keskenyebb, középre zárt gomb
         c1, c2, c3 = st.columns([1.5, 2, 1.5])
         if c2.button("Let's start! 🚀", use_container_width=True):
             st.session_state.intro_done = True
@@ -141,6 +159,12 @@ if api_key:
             if cols[i%2].button(l, use_container_width=True):
                 st.session_state.user_level = l
                 st.rerun()
+        # VISSZATÉRT AZ ASSESSMENT GOMB
+        if st.button("🔍 Assess my level", use_container_width=True):
+            st.session_state.user_level = "Determining..."
+            st.session_state.current_mode = "Assessment"
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Start assessment.", "Level Evaluator")})
+            st.rerun()
 
     elif not st.session_state.current_mode:
         st.subheader("Choose mode:")
@@ -151,18 +175,19 @@ if api_key:
                 st.session_state.current_mode = m.split()[-1]
                 st.rerun()
 
-    elif not st.session_state.chat_topic:
+    elif not st.session_state.chat_topic and st.session_state.current_mode != "Assessment":
         st.subheader("Select topic:")
         t_cols = st.columns(2)
         for idx, topic in enumerate(TOPICS):
             if t_cols[idx%2].button(topic, use_container_width=True):
                 st.session_state.chat_topic = topic
-                with st.spinner('Buddy is preparing...'):
-                    ans = call_groq("Hello! Let's start.", "Partner")
+                with st.spinner('Buddy is getting ready...'):
+                    ans = call_groq("Let's begin.", "Partner")
                     st.session_state.messages.append({"role": "assistant", "content": ans})
                 st.rerun()
 
     else:
+        # Chat felület (képpel, ha Picture mód van)
         if st.session_state.current_mode == "Picture" and st.session_state.chat_topic:
             st.image(f"https://image.pollinations.ai/prompt/exam_photo_{st.session_state.chat_topic}?seed={random.randint(1,99)}")
 

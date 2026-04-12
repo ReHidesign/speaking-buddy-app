@@ -10,19 +10,13 @@ import random
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- INITIALIZE SESSION STATE (MINDEN ELŐTT!) ---
-state_defaults = {
-    "messages": [],
-    "current_mode": None,
-    "user_level": None,
-    "chat_topic": None,
-    "intro_done": False,
-    "feedback_level": "Balanced"
-}
-
-for key, default in state_defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
+# --- SESSION STATE INITIALIZATION (Betonbiztos kezdés) ---
+if "messages" not in st.session_state: st.session_state.messages = []
+if "current_mode" not in st.session_state: st.session_state.current_mode = None
+if "user_level" not in st.session_state: st.session_state.user_level = None
+if "chat_topic" not in st.session_state: st.session_state.chat_topic = None
+if "intro_done" not in st.session_state: st.session_state.intro_done = False
+if "feedback_level" not in st.session_state: st.session_state.feedback_level = "Balanced"
 
 # --- CSS DESIGN ---
 st.markdown("""
@@ -31,7 +25,6 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .buddy-header { text-align: center; padding: 20px; }
-    .buddy-avatar { font-size: 80px; }
     .main-title { font-weight: 800; margin-bottom: 0px; }
     .sub-title { font-style: italic; opacity: 0.8; margin-bottom: 25px; }
     .welcome-box { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; }
@@ -53,34 +46,28 @@ else:
     api_key = st.sidebar.text_input("Enter Groq API Key:", type="password")
 
 if api_key:
-    def speak_text(text):
-        clean = re.sub(r'\(.*?\)', '', text).replace("*", "").strip()
-        tts = gTTS(text=clean if clean else "I'm listening.", lang='en', tld='co.uk')
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        return fp
-
     def call_groq(prompt, system_instruction):
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         lv, md, tp = st.session_state.user_level, st.session_state.current_mode, st.session_state.chat_topic
-        kb = "B1: Topics for Teenagers. B2: 1000 Questions/Bajnóczi. C1: 1000 Questions C1. Civilization: Culture tutor. Don't repeat questions!"
-        hist = [{"role": "system", "content": f"{system_instruction} Level:{lv}, Mode:{md}, Topic:{tp}. {kb}"}]
+        hist = [{"role": "system", "content": f"{system_instruction} Level:{lv}, Mode:{md}, Topic:{tp}."}]
         hist.extend(st.session_state.messages[-4:])
         if prompt: hist.append({"role": "user", "content": prompt})
         try:
             r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": hist, "temperature": 0.8}, timeout=20)
             return r.json()['choices'][0]['message']['content']
-        except: return "*(Buddy smiles)* Connection glitch! Can you repeat?"
+        except: return "*(Buddy smiles)* Glitch! Say it again?"
 
-    # --- SIDEBAR ---
+    # --- SIDEBAR: CONTROL PANEL ---
     with st.sidebar:
         st.title("⚙️ Control Panel")
         st.session_state.feedback_level = st.select_slider("Feedback Style:", options=["Relaxed", "Balanced", "Teacher Mode"], value=st.session_state.feedback_level)
         st.markdown("---")
+        # Ezek a blokkok felelnek a folyamatos kijelzésért
         if st.session_state.user_level: st.markdown(f"<div class='status-box'><b>Level:</b> {st.session_state.user_level}</div>", unsafe_allow_html=True)
         if st.session_state.current_mode: st.markdown(f"<div class='status-box'><b>Mode:</b> {st.session_state.current_mode}</div>", unsafe_allow_html=True)
         if st.session_state.chat_topic: st.markdown(f"<div class='status-box'><b>Topic:</b> {st.session_state.chat_topic}</div>", unsafe_allow_html=True)
+        
         if st.session_state.user_level and st.button("🔄 New Session"):
             st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
             st.session_state.messages = []
@@ -89,48 +76,54 @@ if api_key:
     # --- MAIN FLOW ---
     if not st.session_state.intro_done:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
-        st.markdown("<div class='welcome-box'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b>.<br><br>Whether you want to <b>debate</b>, <b>roleplay</b>, or just <b>chat</b>, I'm ready!</div>", unsafe_allow_html=True)
+        st.markdown("<div class='welcome-box'>I am here to help you <b>practise English speaking</b>.<br><br>Choose your level and let's get started!</div>", unsafe_allow_html=True)
         if st.button("Let's start! 🚀", kind="secondary"):
             st.session_state.intro_done = True
             st.rerun()
 
     elif not st.session_state.user_level:
         st.subheader("Set your level:")
+        # MOBIL FIX: Soronkénti kettes felosztás a logikus sorrendért (A1-A2, B1-B2...)
         for i in range(0, len(LEVELS), 2):
-            cols = st.columns(2)
-            for j in range(2):
-                if i+j < len(LEVELS):
-                    if cols[j].button(LEVELS[i+j], key=f"L{i+j}"):
-                        st.session_state.user_level = LEVELS[i+j]
-                        st.rerun()
+            c1, c2 = st.columns(2)
+            if c1.button(LEVELS[i], key=f"L{i}"):
+                st.session_state.user_level = LEVELS[i]
+                st.rerun()
+            if i+1 < len(LEVELS):
+                if c2.button(LEVELS[i+1], key=f"L{i+1}"):
+                    st.session_state.user_level = LEVELS[i+1]
+                    st.rerun()
 
     elif not st.session_state.current_mode:
         st.subheader("Choose mode:")
         for i in range(0, len(MODES), 2):
-            cols = st.columns(2)
-            for j in range(2):
-                if i+j < len(MODES):
-                    if cols[j].button(MODES[i+j], key=f"M{i+j}"):
-                        st.session_state.current_mode = MODES[i+j]
-                        st.rerun()
+            c1, c2 = st.columns(2)
+            if c1.button(MODES[i], key=f"M{i}"):
+                st.session_state.current_mode = MODES[i]
+                st.rerun()
+            if i+1 < len(MODES):
+                if c2.button(MODES[i+1], key=f"M{i+1}"):
+                    st.session_state.current_mode = MODES[i+1]
+                    st.rerun()
 
     elif not st.session_state.chat_topic:
         st.subheader("Select topic:")
         for i in range(0, len(TOPICS), 2):
-            cols = st.columns(2)
-            for j in range(2):
-                if i+j < len(TOPICS):
-                    if cols[j].button(TOPICS[i+j], key=f"T{i+j}"):
-                        st.session_state.chat_topic = TOPICS[i+j]
-                        st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
-                        st.rerun()
+            c1, c2 = st.columns(2)
+            if c1.button(TOPICS[i], key=f"T{i}"):
+                st.session_state.chat_topic = TOPICS[i]
+                st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
+                st.rerun()
+            if i+1 < len(TOPICS):
+                if c2.button(TOPICS[i+1], key=f"T{i+1}"):
+                    st.session_state.chat_topic = TOPICS[i+1]
+                    st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
+                    st.rerun()
     else:
-        # Chat Interface
+        # Chat Interface (Standard rész)
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
-                if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
-                    st.audio(speak_text(msg["content"]), format='audio/mp3')
         
         audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
         text = st.chat_input("Write to Buddy...")

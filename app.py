@@ -9,7 +9,7 @@ import re
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="SpeakingBuddy", page_icon="🤖", layout="centered")
 
-# --- CSS: VÉGLEGES ÉS STABIL STÍLUSOK ---
+# --- CSS: STABIL KÉK DESIGN ---
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -19,7 +19,7 @@ st.markdown("""
     .buddy-header { text-align: center; padding: 20px; }
     .buddy-avatar { font-size: 80px; margin-bottom: 5px; }
     .main-title { font-family: 'Helvetica Neue', sans-serif; font-weight: 800; margin-bottom: 0px; }
-    .sub-title { font-style: italic; margin-top: 0px; margin-bottom: 25px; opacity: 0.8; }
+    .sub-title { font-style: italic; opacity: 0.8; margin-top: 0px; margin-bottom: 25px; }
     .welcome-text { text-align: center; font-size: 1.1em; line-height: 1.6; margin-bottom: 25px; max-width: 600px; margin-left: auto; margin-right: auto; }
     
     /* ÖSSZES GOMB KÉKÍTÉSE */
@@ -39,16 +39,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4) !important;
     }
 
-    /* SPECIÁLIS START GOMB KÖZÉPRE KÉNYSZERÍTÉS */
-    .start-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        width: 100%;
-    }
-
-    /* STATUS DOBOZOK */
     .status-box { 
         padding: 10px; border-radius: 10px; border-left: 5px solid #3498db; 
         margin-bottom: 10px; background-color: rgba(120, 120, 120, 0.15);
@@ -96,11 +86,11 @@ if api_key:
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         kb_mapping = """
-        Your sources:
+        Knowledge Base Sources:
         - B1: 'Twenty-three Topics for Teenagers'
         - B2: '1000 Questions and Answers B2', 'Színes B2'
         - C1/C2: '1000 Questions and Answers C1', 'Színes C1'
-        CRITICAL: Follow academic standards but stay conversational. Never repeat questions. Track context.
+        CRITICAL: Never repeat questions. Match exam criteria for the level. Be encouraging but professional.
         """
         mode_instr = f"Mode: {st.session_state.current_mode}. Level: {st.session_state.user_level}. Topic: {st.session_state.chat_topic}. {kb_mapping}"
         hist = [{"role": "system", "content": f"{system_instruction} {mode_instr}"}]
@@ -127,7 +117,7 @@ if api_key:
                 st.session_state.messages = []
                 st.rerun()
         if st.session_state.user_level:
-            if st.button("🔄 Restart Level/Mode"):
+            if st.button("🔄 Change Level/Mode"):
                 st.session_state.user_level = st.session_state.current_mode = st.session_state.chat_topic = None
                 st.session_state.messages = []
                 st.rerun()
@@ -140,12 +130,9 @@ if api_key:
         st.markdown("<div class='buddy-header'><div class='buddy-avatar'>🤖</div><h1 class='main-title'>SpeakingBuddy</h1><p class='sub-title'>your interactive language partner</p></div>", unsafe_allow_html=True)
         st.markdown("<div class='welcome-text'>I am here to help you <b>practise English speaking</b> and focus on <b>real-life communication</b> (and exam preparation).<br><br>Whether you want to <b>debate</b>, roleplay a <b>situation</b>, describe a <b>picture</b>, or just have a <b>friendly chat</b>, I'm ready!</div>", unsafe_allow_html=True)
         
-        # START GOMB - Kényszerített középre zárás
-        c1, c2, c3 = st.columns([1, 1.5, 1])
-        with c2:
-            if st.button("Let's start! 🚀"):
-                st.session_state.intro_done = True
-                st.rerun()
+        if st.button("Let's start! 🚀"):
+            st.session_state.intro_done = True
+            st.rerun()
 
     elif not st.session_state.user_level:
         st.subheader("Set your level:")
@@ -155,12 +142,10 @@ if api_key:
                 st.session_state.user_level = l
                 st.rerun()
         st.markdown("---")
-        # SZINTFELMÉRŐ GOMB KÖZÉPRE
-        _, ac, _ = st.columns([1, 2, 1])
-        if ac.button("🔍 Assess my level"):
+        if st.button("🔍 Assess my level"):
             st.session_state.user_level = "Determining..."
             st.session_state.current_mode = "Assessment"
-            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Please start my level assessment.", "Level Evaluator")})
+            st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello! Start level assessment.", "Level Evaluator")})
             st.rerun()
 
     elif not st.session_state.current_mode:
@@ -181,20 +166,19 @@ if api_key:
                 st.session_state.messages.append({"role": "assistant", "content": call_groq("Hello!", "Partner")})
                 st.rerun()
     else:
-        # Chat felület
+        # Chat loop
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
                 if msg == st.session_state.messages[-1] and msg["role"] == "assistant":
                     st.audio(speak_text(msg["content"]), format='audio/mp3')
 
-        audio_data = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
-        text_input = st.chat_input("Write to Buddy...")
-        
-        user_msg = text_input
-        if audio_data:
+        audio = mic_recorder(start_prompt="🎤 Speak", stop_prompt="🛑 Stop", key="mic")
+        text = st.chat_input("Write to Buddy...")
+        user_msg = text
+        if audio:
             try:
-                r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": f"Bearer {api_key}"}, files={"file": ("audio.wav", audio_data['bytes'])}, data={"model": "whisper-large-v3", "language": "en"})
+                r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions", headers={"Authorization": f"Bearer {api_key}"}, files={"file": ("audio.wav", audio['bytes'])}, data={"model": "whisper-large-v3", "language": "en"})
                 user_msg = r.json().get("text", "")
             except: user_msg = "ERROR"
 
